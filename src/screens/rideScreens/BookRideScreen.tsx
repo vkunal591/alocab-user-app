@@ -1,7 +1,7 @@
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View, ToastAndroid, Modal, Image } from 'react-native';
 import React, { useEffect, useState } from 'react';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import { CurrentRenderContext, useNavigation } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';

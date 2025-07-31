@@ -1,6 +1,6 @@
 import { Dimensions, Image, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import React, { useState } from 'react';
-import { THEAMCOLOR } from '../../assets/theam/theam';
+import { THEAMCOLOR } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
 import Ionicons from 'react-native-vector-icons/Ionicons';

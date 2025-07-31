@@ -21,7 +21,7 @@ import {
   SPACING,
   RADIUS,
   SHADOW,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 import { RootStackParamList } from '../../navigator/StackNavigator';
 
 const { width, height } = Dimensions.get('window');

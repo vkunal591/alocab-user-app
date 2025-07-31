@@ -4,7 +4,7 @@ import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navi
 import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Alert, ToastAndroid, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ImagePath from '../constants/ImagePath';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
 import HomeStackNatigator from '../navigator/HomeStackNatigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { set } from 'react-hook-form';
@@ -205,7 +205,7 @@ export default function DrawerNavigation() {
         const fetchUserData = async () => {
             setIsLoading(true);
             try {
-                const userData = await AsyncStorage.getItem('user');
+                const userData = await AsyncStorage.getItem('userData');
                 if (userData) {
                     setUser(JSON.parse(userData));
                     setIsLoading(false);

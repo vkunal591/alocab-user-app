@@ -2,7 +2,7 @@ import { Dimensions, StyleSheet, Text, TouchableOpacity, View, ScrollView, Image
 import React, { useState, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -351,6 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    paddingBottom:20
   },
   pathRow: {
     flexDirection: 'row',

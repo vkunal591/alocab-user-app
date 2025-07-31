@@ -32,7 +32,7 @@ import {
   OPACITY,
   BREAKPOINT,
   Z_INDEX,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('window');
 
@@ -126,9 +126,9 @@ const RegisterScreen = () => {
       const otpResult = await apiUtils.post<OtpResponse>('/api/passenger/otp', {
         phoneNumber: data.phone,
       });
-
+      console.log(otpResult)
       showToastOrAlert(otpResult.message || 'Registration successful! OTP sent.');
-      navigation.navigate( 'OtpRegisterScreen');
+      navigation.navigate('OtpRegisterScreen', { otp: otpResult?.otp });
     } catch (error: any) {
       console.error('Registration/OTP Error:', error);
       showToastOrAlert(error.message || 'Registration or OTP request failed. Please try again.');
@@ -233,8 +233,13 @@ const RegisterScreen = () => {
               {/* Phone Input */}
               <Controller
                 control={control}
-                rules={{ required: 'Phone number is required' }}
-                render={({ field: { onChange, onBlur, value } }) => (
+                rules={{
+                  required: 'Phone number is required',
+                  pattern: {
+                    value: /^\d{10}$/, // Only digits, exactly 10
+                    message: 'Phone number must be exactly 10 digits',
+                  },
+                }} render={({ field: { onChange, onBlur, value } }) => (
                   <View style={styles.inputWrapper}>
                     <Image source={ImagePath?.phone} style={styles.inputIcon} />
                     <View style={styles.line} />
@@ -244,9 +249,14 @@ const RegisterScreen = () => {
                       placeholderTextColor={THEAMCOLOR.SecondaryGray}
                       value={value}
                       onBlur={onBlur}
-                      onChangeText={onChange}
-                      keyboardType="phone-pad"
+                      onChangeText={(text) => {
+                        // Allow only digits
+                        const filteredText = text.replace(/[^0-9]/g, '');
+                        onChange(filteredText);
+                      }}
+                      keyboardType="number-pad"
                       onFocus={(e) => scrollToInput(e.nativeEvent.target)}
+                      maxLength={10} // prevent typing more than 10 digits
                     />
                   </View>
                 )}

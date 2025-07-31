@@ -18,7 +18,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'react-native-image-picker';
 import BackButton from '../../Components/common/BackButton';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import ImagePath from '../../constants/ImagePath';
 
 const { width, height } = Dimensions.get('window');

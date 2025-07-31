@@ -4,11 +4,11 @@ import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Entypo from 'react-native-vector-icons/Entypo';
-import { LINE_HEIGHT, RADIUS, SHADOW, SPACING, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../assets/theam/theam';
+import { LINE_HEIGHT, RADIUS, SHADOW, SPACING, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
 import { useNavigation } from '@react-navigation/native';
 import ImagePath from '../constants/ImagePath';
 import { ScrollView } from 'react-native-gesture-handler';
-import { AsyncStorage } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 const { width, height } = Dimensions.get('screen');
@@ -111,13 +111,18 @@ const HomeScreen = () => {
   );
 
   useEffect(() => {
-    const userData = async () => {
-      const user = await AsyncStorage.getItem('user');
-      if (user) {
-        setUser(user);
+    const fetchUserData = async () => {
+      try {
+        const user = await AsyncStorage.getItem('userData');
+        if (user) {
+          setUser(JSON.parse(user));
+        }
+      } catch (error) {
+        console.error('Failed to load user data:', error);
       }
     };
-    userData();
+
+    fetchUserData();
   }, []);
 
 
@@ -131,7 +136,7 @@ const HomeScreen = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.header}>
-            <Text style={styles.headerText}>Hello, Welcome {user?.name}</Text>
+            <Text style={styles.headerText}>{user?.name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <Image source={ImagePath.pin} style={{ width: 10, height: 15, resizeMode: 'contain' }} />
               <Text style={styles.subHeaderText}>223, A Pocket, Dwarka, New Delhi</Text>

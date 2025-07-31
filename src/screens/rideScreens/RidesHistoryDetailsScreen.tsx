@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import SkeletonPlaceholder from 'react-native-skeleton-placeholder';
 import BackButton from '../../Components/common/BackButton';
-import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../assets/theam/theam';
+import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../../assets/theam/theam';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ImagePath from '../../constants/ImagePath';
@@ -156,15 +156,15 @@ const RidesHistoryDetailsScreen = () => {
         <View style={styles.rideDetailsContainer}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Service Type</Text>
-            <Text style={styles.infoValue}>{rideDetails.vehicleType}</Text>
+            <Text style={styles.infoValue}>{rideDetails?.vehicleType}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Vehicle Number</Text>
-            <Text style={styles.infoValue}>{rideDetails.driver.vehicle.number}</Text>
+            <Text style={styles.infoValue}>{rideDetails?.driver?.vehicle.number}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Date of Ride</Text>
-            <Text style={styles.infoValue}>{new Date(rideDetails.createdAt).toLocaleString()}</Text>
+            <Text style={styles.infoValue}>{new Date(rideDetails?.createdAt)?.toLocaleString()}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Ride ID</Text>
@@ -173,24 +173,24 @@ const RidesHistoryDetailsScreen = () => {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Status</Text>
             <Text style={[styles.infoValue, { backgroundColor: rideStatusColors[rideDetails.status as RideStatus], fontWeight: '700' }]}>
-              {rideDetails.status.charAt(0).toUpperCase() + rideDetails.status.slice(1)}
+              {rideDetails?.status?.charAt(0).toUpperCase() + rideDetails?.status?.slice(1)}
             </Text>
           </View>
           <View style={styles.ratingContainer}>
             <View style={styles.ratingRow}>
               <Image source={{ uri: 'https://i.pravatar.cc/150?img=8' }} style={styles.driverImage} />
               <View style={styles.profileContent}>
-                <Text style={styles.driverName}>{rideDetails.driver.name}</Text>
+                <Text style={styles.driverName}>{rideDetails?.driver?.name}</Text>
                 <View style={styles.starsContainer}>
                   <Text style={{ fontSize: 12, color: 'gray', marginRight: 5 }}>You Rated:</Text>
-                  {renderStars(review.rating)}
+                  {renderStars(review?.rating)}
                 </View>
               </View>
             </View>
           </View>
           <View style={styles.totalAmountRow}>
             <Text style={styles.sectionTitle}>Total Amount</Text>
-            <Text style={[styles.sectionTitle, { color: THEAMCOLOR.PrimaryGreen }]}>₹ {rideDetails.fare}</Text>
+            <Text style={[styles.sectionTitle, { color: THEAMCOLOR.PrimaryGreen }]}>₹ {rideDetails?.fare}</Text>
           </View>
           <View style={styles.ridePath}>
             <View style={styles.pathRow}>

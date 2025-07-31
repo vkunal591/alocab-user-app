@@ -22,7 +22,7 @@ import {
   TEXT_SIZE,
   THEAMCOLOR,
   THEAMFONTFAMILY,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 import { RootStackParamList } from '../../navigator/StackNavigator';
 import ImagePath from '../../constants/ImagePath';
 import AsyncStorage from '@react-native-async-storage/async-storage';

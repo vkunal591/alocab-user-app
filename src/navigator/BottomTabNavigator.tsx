@@ -2,7 +2,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import { THEAMCOLOR } from '../assets/theam/theam';
+import { THEAMCOLOR } from '../../assets/theam/theam';
 import { Image } from 'react-native';
 import ImagePath from '../constants/ImagePath';
 import HomeStackNatigator from './HomeStackNatigator';

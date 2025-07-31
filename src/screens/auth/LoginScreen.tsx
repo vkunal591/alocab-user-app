@@ -32,7 +32,7 @@ import {
   OPACITY,
   BREAKPOINT,
   Z_INDEX,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('screen');
 const scaleFont = (size: number) => Math.round(size * Math.min(width / 375, 1.5));
@@ -77,15 +77,15 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    AsyncStorage.getItem('userToken').then((token) => {
-      if (token) {
-        // User is authenticated, navigate to HomeScreen
-        navigation.replace('HomeScreen');
-      } else {
-        // User is not authenticated, stay on LoginScreen
-        console.log('No user token found, staying on LoginScreen');
-      }
-    });
+    // AsyncStorage.getItem('userToken').then((token) => {
+    //   if (token) {
+    //     // User is authenticated, navigate to HomeScreen
+    //     navigation.replace('HomeScreen');
+    //   } else {
+    //     // User is not authenticated, stay on LoginScreen
+    //     console.log('No user token found, staying on LoginScreen');
+    //   }
+    // });
   }, [navigation, logoOpacity, formTranslateY]);
 
   const showToastOrAlert = (message: string) => {
@@ -105,10 +105,9 @@ const LoginScreen = () => {
       });
       console.log('API Response:', response);
       if (response.success) {
-        await AsyncStorage.setItem('phoneNumber', data.phone);
         // Store the user in AsyncStorage
         showToastOrAlert(response.message || 'OTP sent successfully!');
-        navigation.navigate('OtpScreen', { phone: data.phone });
+        navigation.navigate('OtpScreen', { phone: data.phone, otp: response?.otp });
       }
     } catch (error: any) {
       console.error('Login Error:', error);
@@ -141,7 +140,7 @@ const LoginScreen = () => {
   const scrollToInput = (y: number) => {
     scrollViewRef.current?.scrollTo({ y, animated: true });
   };
-  console.log(AsyncStorage.getItem('user'))
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <Modal
@@ -179,8 +178,8 @@ const LoginScreen = () => {
                 rules={{
                   required: 'Phone number is required',
                   pattern: {
-                    value: /^\+?[1-9]\d{1,14}$/,
-                    message: 'Invalid phone number',
+                    value: /^\d{10}$/, // Only digits, exactly 10
+                    message: 'Phone number must be exactly 10 digits',
                   },
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
@@ -193,11 +192,16 @@ const LoginScreen = () => {
                       placeholderTextColor={THEAMCOLOR.SecondaryGray}
                       value={value}
                       onBlur={onBlur}
-                      onChangeText={onChange}
-                      keyboardType="phone-pad"
+                      onChangeText={(text) => {
+                        // Allow only digits
+                        const filteredText = text.replace(/[^0-9]/g, '');
+                        onChange(filteredText);
+                      }}
+                      keyboardType="number-pad"
                       onFocus={(e) => scrollToInput(e.nativeEvent.target)}
                       returnKeyType="done"
                       onSubmitEditing={handleButtonPress}
+                      maxLength={10} // prevent typing more than 10 digits
                     />
                   </View>
                 )}
@@ -358,11 +362,12 @@ const styles = StyleSheet.create({
   },
   orLogin: {
     textAlign: 'left',
-    marginVertical: SPACING.md,
+    marginTop: SPACING.md,
     fontSize: scaleFont(TEXT_SIZE.body),
     lineHeight: LINE_HEIGHT.body,
     fontFamily: THEAMFONTFAMILY.LatoRegular,
     color: THEAMCOLOR.SecondaryGray,
+    paddingLeft: 5
   },
   socialButtons: {
     flexDirection: 'row',
@@ -392,7 +397,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEAMCOLOR.PrimaryGreen,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.lg,
-    marginTop: height * 0.32,
+    marginTop: height * 0.2,
     justifyContent: 'center',
     alignItems: 'center',
     width: width * 0.9,

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMFONTFAMILY, THEAMCOLOR } from '../../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMFONTFAMILY, THEAMCOLOR } from '../../../assets/theam/theam';
 
 const { width } = Dimensions.get('window');
 

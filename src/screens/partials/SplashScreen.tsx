@@ -1,9 +1,13 @@
-import React, { useEffect, useRef, useContext, useState } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
-import ImagePath from '../../constants/ImagePath';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  Animated,
+  Image,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ImagePath from '../../constants/ImagePath';
 import apiUtils from '../../utils/apiUtils';
-import { set } from 'react-hook-form';
 
 const SplashScreen = ({ navigation }: any) => {
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -11,9 +15,9 @@ const SplashScreen = ({ navigation }: any) => {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
-
-  const fetchCurrentUser = async () => {
-    AsyncStorage.getItem('userToken').then(async (token) => {
+  const fetchCurrentUser = async (): Promise<boolean> => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
       console.log('User Token:', token);
       if (token) {
         const response: any = await apiUtils.get('/api/passenger/current');
@@ -22,27 +26,22 @@ const SplashScreen = ({ navigation }: any) => {
           const user = response.user;
           console.log('Current User:', user);
           return true;
-          // Handle user data as needed
-        }else {
+        } else {
           console.error('Failed to fetch current user:', response?.message || 'Unknown error');
           return false;
         }
       } else {
         console.warn('No user token found, proceeding without authentication');
-        return false; // No user token, proceed without authentication
+        return false;
       }
-    });
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+      return false;
+    }
   };
 
-
-
   useEffect(() => {
-    // const rotate = rotateAnim.interpolate({
-    //   inputRange: [0, 1],
-    //   outputRange: ['0deg', '360deg'],
-    // });
-
-    // Start animations
+    // Start animation
     Animated.sequence([
       Animated.parallel([
         Animated.timing(opacityAnim, {
@@ -69,38 +68,30 @@ const SplashScreen = ({ navigation }: any) => {
       }),
     ]).start();
 
+    // Authentication and navigation check
+    const timer = setTimeout(async () => {
+      try {
+        const isIntroViewed = await AsyncStorage.getItem('isIntroViewed');
+        console.log('isIntroViewed:', isIntroViewed);
 
-
-
-
-
-    // Navigate after animations and auth check
-    const timer = setTimeout(() => {
-      AsyncStorage.getItem('isIntroViewed').then((value) => {
-        console.log('isIntroViewed:', value);
-        if (value === 'true') {
-          fetchCurrentUser().then((user) => {
-            console.log('Fetched User:', user);
-            if (user) {
-              navigation.replace('HomeScreen');
-            } else {
-              // User is authenticated, navigate to App stack
-              navigation.replace('LoginScreen');
-            }
-          });
+        if (isIntroViewed === 'true') {
+          const isLoggedIn = await fetchCurrentUser();
+          if (isLoggedIn) {
+            navigation.replace('HomeScreen');
+          } else {
+            navigation.replace('LoginScreen');
+          }
         } else {
-          // User is not authenticated, navigate to Intro stack
           navigation.replace('IntroScreen1');
         }
-      })
-    }, 2500); // Wait for animations to complete
+      } catch (e) {
+        console.error('Splash error:', e);
+        navigation.replace('LoginScreen');
+      }
+    }, 2500);
 
-    // Cleanup timer on unmount
     return () => clearTimeout(timer);
-  }, [navigation, opacityAnim, scaleAnim, rotateAnim, bounceAnim]);
-
-
-
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
@@ -116,13 +107,13 @@ const SplashScreen = ({ navigation }: any) => {
                 rotate: rotateAnim.interpolate({
                   inputRange: [0, 1],
                   outputRange: ['0deg', '360deg'],
-                })
+                }),
               },
               {
                 translateY: bounceAnim.interpolate({
                   inputRange: [0, 1],
                   outputRange: [0, -20],
-                })
+                }),
               },
             ],
           },
@@ -144,7 +135,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 300,
     height: 300,
-    marginBottom: 20,
     resizeMode: 'contain',
   },
 });

@@ -5,7 +5,7 @@ import MapView, { Marker } from 'react-native-maps';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import ImagePath from '../../constants/ImagePath';
 import BackButton from '../../Components/common/BackButton';
 import { useNavigation } from '@react-navigation/native';

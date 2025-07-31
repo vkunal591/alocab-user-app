@@ -1,6 +1,6 @@
 import { Dimensions, Image, StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import React, { useState } from 'react';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
 import Ionicons from 'react-native-vector-icons/Ionicons';

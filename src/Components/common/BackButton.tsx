@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { THEAMCOLOR } from '../../assets/theam/theam';
+import { THEAMCOLOR } from '../../../assets/theam/theam';
 import ImagePath from '../../constants/ImagePath';
 
 const BackButton = () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import BackButton from '../../Components/common/BackButton';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMFONTFAMILY, THEAMCOLOR } from '../../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMFONTFAMILY, THEAMCOLOR } from '../../../assets/theam/theam';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const { width } = Dimensions.get('window');

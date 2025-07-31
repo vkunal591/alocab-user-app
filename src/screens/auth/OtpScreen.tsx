@@ -16,7 +16,7 @@ import {
   ToastAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
 import ImagePath from '../../constants/ImagePath';
 import apiUtils from '../../utils/apiUtils';
@@ -32,7 +32,7 @@ import {
   OPACITY,
   BREAKPOINT,
   Z_INDEX,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('screen');
 const scaleFont = (size: number) => Math.round(size * Math.min(width / 375, 1.5));
@@ -193,8 +193,12 @@ const OTPInput = React.memo(
 
 const OtpScreen = () => {
   const navigation = useNavigation<any>();
+  const route: any = useRoute()
+  const phone = route.params?.phone;
+  const otp = route.params?.otp
   const [loading, setLoading] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState<string>(phone);
+  const [otpLoacal, setOtpLoacal] = useState(otp)
   const { control, handleSubmit, formState: { errors }, reset } = useForm<OtpFormData>();
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -204,48 +208,48 @@ const OtpScreen = () => {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   // Fetch phone number from AsyncStorage
-  useEffect(() => {
-    const fetchPhoneNumber = async () => {
-      try {
-        const phone = await AsyncStorage.getItem('phoneNumber');
-        console.log('Fetched Phone Number:', phone);
-         // If phone number is not passed as a param, try to get it from AsyncStorage
-        if (phone) {
-          setPhoneNumber(phone);
-        } else {
-          console.warn('Phone number not found in AsyncStorage');
-        }
-      } catch (error) {
-        console.error('Failed to fetch phone number from AsyncStorage:', error);
-      }
-    };
+  // useEffect(() => {
+  //   const fetchPhoneNumber = async () => {
+  //     try {
+  //       const phone = await AsyncStorage.getItem('phoneNumber');
+  //       console.log('Fetched Phone Number:', phone);
+  //       // If phone number is not passed as a param, try to get it from AsyncStorage
+  //       if (phone) {
+  //         setPhoneNumber(phone);
+  //       } else {
+  //         console.warn('Phone number not found in AsyncStorage');
+  //       }
+  //     } catch (error) {
+  //       console.error('Failed to fetch phone number from AsyncStorage:', error);
+  //     }
+  //   };
 
-    fetchPhoneNumber();
+  //   fetchPhoneNumber();
 
-    Animated.parallel([
-      Animated.timing(logoOpacity, {
-        toValue: OPACITY.full,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(formTranslateY, {
-        toValue: 0,
-        duration: 600,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  //   Animated.parallel([
+  //     Animated.timing(logoOpacity, {
+  //       toValue: OPACITY.full,
+  //       duration: 800,
+  //       useNativeDriver: true,
+  //     }),
+  //     Animated.timing(formTranslateY, {
+  //       toValue: 0,
+  //       duration: 600,
+  //       delay: 200,
+  //       useNativeDriver: true,
+  //     }),
+  //   ]).start();
 
-    AsyncStorage.getItem('userToken').then((token) => {
-      if (token) {
-        // User is authenticated, navigate to HomeScreen
-        navigation.replace('HomeScreen');
-      } else {
-        // User is not authenticated, stay on OtpScreen
-        console.log('User is not authenticated, staying on OtpScreen');
-      }
-    })
-  }, [navigation, logoOpacity, formTranslateY]);
+  //   AsyncStorage.getItem('userToken').then((token) => {
+  //     if (token) {
+  //       // User is authenticated, navigate to HomeScreen
+  //       navigation.replace('HomeScreen');
+  //     } else {
+  //       // User is not authenticated, stay on OtpScreen
+  //       console.log('User is not authenticated, staying on OtpScreen');
+  //     }
+  //   })
+  // }, [navigation, logoOpacity, formTranslateY]);
 
   const showToastOrAlert = (message: string) => {
     if (Platform.OS === 'android') {
@@ -269,7 +273,13 @@ const OtpScreen = () => {
       // Save user data and token to AsyncStorage
       await AsyncStorage.setItem('userToken', response.token);
       await AsyncStorage.setItem('userData', JSON.stringify(response.user));
-      navigation.replace('HomeScreen'); // Navigate to HomeScreen after successful verification
+      // navigation.replace('HomeScreen'); // Navigate to HomeScreen after successful verification
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'HomeScreen' }],
+        })
+      );
       // Assuming login is a function that handles user login
       showToastOrAlert('Login successful!');
       // navigation.replace('App', { screen: 'HomeScreen' });
@@ -297,8 +307,25 @@ const OtpScreen = () => {
     handleSubmit(onSubmit)();
   };
 
-  const handleResend = () => {
-    reset({ otp: '' }); // Clear OTP input
+  const handleResend = async () => {
+    setLoading(true);
+    try {
+      // API call to send OTP
+      const response: any = await apiUtils.post<OtpResponse>('/api/passenger/otp', {
+        phoneNumber: phoneNumber,
+      });
+      console.log('API Response:', response);
+      if (response.success) {
+        setOtpLoacal(response?.otp)
+        reset({ otp: '' })
+        showToastOrAlert(response.message || 'OTP sent successfully!');
+      }
+    } catch (error: any) {
+      ToastAndroid.show(error?.message || "Faield to resend otp", ToastAndroid.SHORT)
+    } finally {
+      setLoading(false)
+    }
+
   };
 
   return (
@@ -319,13 +346,11 @@ const OtpScreen = () => {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          <Animated.View style={[styles.logoSection, { opacity: logoOpacity }]}>
-            <Image
-              source={ImagePath?.alocabLogo}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </Animated.View>
+          <Image
+            source={ImagePath?.alocabLogo}
+            style={styles.logo}
+            resizeMode="contain"
+          />
 
           <Animated.View style={[styles.formContainer, { transform: [{ translateY: formTranslateY }] }]}>
             <Text style={styles.title}>Enter OTP</Text>
@@ -353,29 +378,30 @@ const OtpScreen = () => {
             </View>
 
             <ResendTimer onResend={handleResend} phoneNumber={phoneNumber} />
-
-            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-              <TouchableOpacity
-                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                onPress={handleButtonPress}
-                disabled={loading || !phoneNumber}
-              >
-                <Text style={styles.submitButtonText}>Verify</Text>
-              </TouchableOpacity>
-            </Animated.View>
-
-            <View style={styles.footerText}>
-              <Text style={styles.accountText}>Don’t have an account?</Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('RegisterScreen')}
-              >
-                <Text style={styles.otpText}>Register</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={{ textAlign: "left", width: width * 0.9 }}>Hint: {otpLoacal}</Text>
           </Animated.View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+      <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+        <TouchableOpacity
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          onPress={handleButtonPress}
+          disabled={loading || !phoneNumber}
+        >
+          <Text style={styles.submitButtonText}>Verify</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <View style={styles.footerText}>
+        <Text style={styles.accountText}>Don’t have an account?</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RegisterScreen')}
+        >
+          <Text style={styles.otpText}>Register</Text>
+        </TouchableOpacity>
+      </View>
+
+    </SafeAreaView >
   );
 };
 
@@ -392,7 +418,6 @@ const styles = StyleSheet.create({
     zIndex: Z_INDEX.modal,
   },
   scrollContent: {
-    flexGrow: 1,
     paddingBottom: SPACING.xxxl,
   },
   container: {
@@ -411,6 +436,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xxl,
   },
   logo: {
+    marginTop: 16,
     width: isDesktop ? width * 0.3 : isTablet ? width * 0.4 : width * 0.5,
     height: isDesktop ? height * 0.15 : height * 0.2,
   },
@@ -437,7 +463,7 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
-    marginBottom: SPACING.xl,
+    // marginBottom: SPACING.xl,
   },
   otpContainer: {
     flexDirection: 'row',
@@ -497,7 +523,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEAMCOLOR.PrimaryGreen,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.lg,
-    marginTop: height * 0.35,
+    marginHorizontal: "auto",
+    bottom: 0,
+    marginBottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
     width: width * 0.9,
@@ -517,7 +545,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: SPACING.xl,
+    marginVertical: SPACING.md,
   },
   accountText: {
     fontSize: scaleFont(TEXT_SIZE.body),

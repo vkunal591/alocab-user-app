@@ -3,7 +3,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 const { width, height } = Dimensions.get('window');
 import LinearGradient from 'react-native-linear-gradient';
-import { THEAMCOLOR } from '../../assets/theam/theam';
+import { THEAMCOLOR } from '../../../assets/theam/theam';
 
 
 const RideRequestCard = ({ request, onAccept, onDecline }: any) => {

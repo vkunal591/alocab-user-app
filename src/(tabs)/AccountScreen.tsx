@@ -11,7 +11,7 @@ import {
     ToastAndroid,
 } from 'react-native';
 import React, { useState } from 'react';
-import { THEAMCOLOR } from '../assets/theam/theam';
+import { THEAMCOLOR } from '../../assets/theam/theam';
 import ImagePath from '../constants/ImagePath';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';

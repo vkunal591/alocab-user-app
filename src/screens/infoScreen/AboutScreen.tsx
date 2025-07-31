@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Image } from 'react-native';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import Icon from 'react-native-vector-icons/AntDesign';
 
 const AboutScreen = ({ navigation }) => {

@@ -4,7 +4,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient'; // Added for gradient
 import BackButton from '../Components/common/BackButton';
-import { THEAMCOLOR } from '../assets/theam/theam';
+import { THEAMCOLOR } from '../../assets/theam/theam';
 import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');

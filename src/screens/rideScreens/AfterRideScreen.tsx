@@ -19,7 +19,7 @@ import {
   TEXT_SIZE,
   THEAMCOLOR,
   THEAMFONTFAMILY,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import apiUtils from '../../utils/apiUtils';

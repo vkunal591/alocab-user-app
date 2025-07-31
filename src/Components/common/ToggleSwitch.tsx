@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { TouchableOpacity, View, Text, Animated, Easing, StyleSheet } from "react-native";
-import { THEAMCOLOR } from "../../assets/theam/theam";
+import { THEAMCOLOR } from "../../../assets/theam/theam";
 
 const ToggleSwitch = ({ isOn, onToggle, onColor, offColor, size = "large", labelStyle }) => {
     const knobAnim = useRef(new Animated.Value(isOn ? 1 : 0)).current;

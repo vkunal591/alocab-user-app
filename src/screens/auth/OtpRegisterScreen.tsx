@@ -16,7 +16,7 @@ import {
   ToastAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
 import ImagePath from '../../constants/ImagePath';
 import apiUtils from '../../utils/apiUtils';
@@ -32,7 +32,7 @@ import {
   OPACITY,
   BREAKPOINT,
   Z_INDEX,
-} from '../../assets/theam/theam';
+} from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('window');
 
@@ -164,6 +164,9 @@ const OTPInput = React.memo(
 
 const OtpRegisterScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute();
+  const { otp } = route.params;
+  const [otpLocal, setOtpLocal] = useState(otp || "")
   const [loading, setLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [resendTimer, setResendTimer] = useState(30);
@@ -243,6 +246,7 @@ const OtpRegisterScreen = () => {
         phoneNumber,
       });
       console.log('Resend OTP Response:', response);
+      setOtpLocal(response?.otp)
       setResendTimer(30);
       showToastOrAlert(response.message || 'OTP resent successfully!');
       reset({ otp: '' }); // Clear OTP input field
@@ -349,6 +353,7 @@ const OtpRegisterScreen = () => {
               onResendOtp={handleResendOtp}
             />
 
+            <Text>Temp Hint : {otpLocal} </Text>
             <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
               <TouchableOpacity
                 style={[styles.submitButton, loading && styles.submitButtonDisabled]}

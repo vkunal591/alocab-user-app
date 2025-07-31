@@ -4,7 +4,7 @@ import MapView, { Marker } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { LINE_HEIGHT, SPACING, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
+import { LINE_HEIGHT, SPACING, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
 import Icon from 'react-native-vector-icons/Feather';
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   pathRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 1)',
     borderRadius: 15,
     padding: SPACING.md,
     marginHorizontal: SPACING.xl,

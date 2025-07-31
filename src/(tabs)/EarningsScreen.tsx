@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'rea
 import { Dimensions } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { THEAMCOLOR } from '../assets/theam/theam';
+import { THEAMCOLOR } from '../../assets/theam/theam';
 import BackButton from '../Components/common/BackButton';
 import ImagePath from '../constants/ImagePath';
 
