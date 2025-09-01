@@ -1,88 +1,99 @@
-import { Dimensions, Image, StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import React, { useState } from 'react';
-import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
-import BackButton from '../../Components/common/BackButton';
-import ImagePath from '../../constants/ImagePath';
+// src/screens/ChatScreen.tsx
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Dimensions, Image, StyleSheet, Text, View, TextInput,
+    TouchableOpacity, ScrollView, Alert, Linking, KeyboardAvoidingView, Platform
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { launchCamera } from 'react-native-image-picker';
+import { useRoute } from '@react-navigation/native';
+import { THEAMCOLOR } from '../../../assets/theam/theam';
+import BackButton from '../../Components/common/BackButton';
+import {
+    initSocket, addUser, sendMessage as socketSendMessage, onMessageReceived,
+    emitTyping, onTyping, onUsersUpdate, disconnectSocket, getChatMessages, sendChatMessage
+} from '../../utils/apis/chatService';
 
-const { width, height } = Dimensions.get('screen');
+
+const { width } = Dimensions.get('screen');
 
 const ChatScreen = () => {
+    const scrollRef = useRef<ScrollView>(null);
+    const route = useRoute<any>();
+    const ticket = route?.params?.ticket;
+    const ride = route?.params?.ride
+    const currentUserId = ride?.driver?._id;
+    const receiverId = ride?.user?._id;
+
+    console.log(ride)
+    // const currentUserId = '6824667ae592b3012e668358'; // dynamic in real scenarios
+    // const receiverId = '68246666e592b3012e668354'; 
+
     const [message, setMessage] = useState('');
-    const [messages, setMessages] = useState([
-        { id: 1, text: 'Hello! How can I assist you today?', isOwn: false, time: '10:30 AM' },
-        { id: 2, text: 'Hi, I have a question about my booking.', isOwn: true, time: '10:32 AM' },
-        { id: 3, text: 'Sure, please share the details.', isOwn: false, time: '10:33 AM' },
-    ]);
+    const [messages, setMessages] = useState<any[]>([]);
+    const [typingUser, setTypingUser] = useState<string>('');
 
-    const handleSend = () => {
-        if (message.trim()) {
-            const newMessage = {
-                id: messages.length + 1,
-                text: message,
-                isOwn: true,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            setMessages([...messages, newMessage]);
-            setMessage('');
-            // Add logic to send message to backend if needed
-            console.log('Sending message:', message);
-        }
-    };
+    useEffect(() => {
+        initSocket();
+        addUser(currentUserId);
 
-    const checkCameraPermission = async () => {
-        try {
-            const result = await check(PERMISSIONS.ANDROID.CAMERA);
-            switch (result) {
-                case RESULTS.GRANTED:
-                    captureImage();
-                    break;
-                case RESULTS.DENIED:
-                    const requestResult = await request(PERMISSIONS.ANDROID.CAMERA);
-                    if (requestResult === RESULTS.GRANTED) {
-                        captureImage();
-                    } else {
-                        Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
-                    }
-                    break;
-                case RESULTS.BLOCKED:
-                    Alert.alert(
-                        'Permission Blocked',
-                        'Camera permission is blocked. Please enable it in settings.',
-                    );
-                    break;
-            }
-        } catch (error) {
-            console.error('Permission error:', error);
-        }
-    };
-
-    const captureImage = () => {
-        launchCamera({ mediaType: 'photo', cameraType: 'back' }, (response) => {
-            if (response.didCancel) {
-                console.log('User cancelled camera');
-            } else if (response.errorCode) {
-                console.log('Camera Error: ', response.errorMessage);
-            } else if (response.assets && response.assets.length > 0) {
-                const imageUri = response.assets[0].uri;
-                const newImageMessage = {
-                    id: messages.length + 1,
-                    imageUri: imageUri,
-                    isOwn: true,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                };
-                setMessages([...messages, newImageMessage]);
-                // Add logic to send image to backend if needed
-                console.log('Image captured and sent:', imageUri);
-            }
+        onMessageReceived((msg) => {
+            setMessages(prev => [...prev, { id: Date.now(), text: msg.text, isOwn: false, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), chatFile: msg.chatFile }]);
         });
+
+        onTyping(senderId => {
+            setTypingUser(senderId === receiverId ? 'User is typing...' : '');
+            setTimeout(() => setTypingUser(''), 2000);
+        });
+
+        onUsersUpdate(users => console.log('Connected users:', users));
+
+        return () => {
+            disconnectSocket();
+        };
+    }, []);
+
+    useEffect(() => {
+        if (ticket?._id) loadMessages(ticket._id);
+    }, [ticket]);
+
+    const loadMessages = async (ticketId: string) => {
+        try {
+            const res = await getChatMessages(ticketId);
+            setMessages(res.map(msg => ({
+                id: msg._id,
+                text: msg.content,
+                isOwn: msg.initiator === currentUserId,
+                time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            })));
+        } catch (err) {
+            console.error(err);
+            Alert.alert('Error', 'Failed to load messages.');
+        }
+    };
+
+    const handleSend = async () => {
+        if (!message.trim()) return;
+
+        const newMsg: any = { initiator: currentUserId, receiver: receiverId, action: 'commented', content: message, ticketId: ticket?._id };
+        const local = { id: `local-${Date.now()}`, text: message, isOwn: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+
+        setMessages(prev => [...prev, local]);
+        setMessage('');
+
+        socketSendMessage({ senderId: currentUserId, receiverId, text: message });
+        try {
+            await sendChatMessage(newMsg);
+        } catch {
+            Alert.alert('Failed to send message');
+        }
+    };
+
+    const handleTyping = () => {
+        emitTyping({ senderId: currentUserId, receiverId });
     };
 
     return (
         <View style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <BackButton />
                 <View style={styles.profileRow}>
@@ -91,78 +102,54 @@ const ChatScreen = () => {
                         <Text style={styles.name}>Nikhil</Text>
                         <Text style={styles.detail}>Active</Text>
                     </View>
-                    <TouchableOpacity style={styles.callButton}>
+                    <TouchableOpacity style={styles.callButton} onPress={() => Linking.openURL('tel:1234567890')}>
                         <Ionicons name="call-outline" size={20} color={THEAMCOLOR.SecondaryGray} />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Chat Area */}
-            <ScrollView
-                style={styles.chatContainer}
-                contentContainerStyle={styles.chatContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {messages.map((msg) => (
-                    <View
-                        key={msg.id}
-                        style={[
-                            styles.messageBubble,
-                            msg.isOwn ? styles.ownMessage : styles.incomingMessage,
-                        ]}
-                    >
-                        {msg.text ? (
-                            <Text style={msg.isOwn ? styles.messageTextWhite : styles.messageText}>
-                                {msg.text}
-                            </Text>
-                        ) : (
-                            <Image
-                                source={{ uri: msg.imageUri }}
-                                style={styles.messageImage}
-                                resizeMode="cover"
-                            />
-                        )}
-                        <Text style={msg.isOwn ? styles.messageTimeWhite : styles.messageTime}>
-                            {msg.time}
-                        </Text>
+            <ScrollView style={styles.chatContainer} contentContainerStyle={styles.chatContent} ref={scrollRef} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
+                {messages.map(msg => (
+                    <View key={msg.id} style={[styles.messageBubble, msg.isOwn ? styles.ownMessage : styles.incomingMessage]}>
+                        {msg.text && <Text style={msg.isOwn ? styles.messageTextWhite : styles.messageText}>{msg.text}</Text>}
+                        <Text style={msg.isOwn ? styles.messageTimeWhite : styles.messageTime}>{msg.time}</Text>
                     </View>
                 ))}
+                {typingUser ? <Text style={styles.typingText}>{typingUser}</Text> : null}
             </ScrollView>
 
-            {/* Input Area */}
-            <View style={styles.inputContainer}>
-                <TouchableOpacity style={styles.mediaButton} onPress={checkCameraPermission}>
-                    <Ionicons name="camera-outline" size={24} color={THEAMCOLOR.PrimaryGreen} />
-                </TouchableOpacity>
-                <TextInput
-                    style={styles.input}
-                    value={message}
-                    onChangeText={setMessage}
-                    placeholder="Type a message..."
-                    placeholderTextColor={THEAMCOLOR.SecondaryBlack}
-                />
-                <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                    <Ionicons name="send" size={20} color="#fff" />
-                </TouchableOpacity>
-            </View>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+                <View style={styles.inputContainer}>
+                    <TouchableOpacity style={styles.mediaButton}>
+                        <Ionicons name="camera-outline" size={24} color={THEAMCOLOR.PrimaryGreen} />
+                    </TouchableOpacity>
+                    <TextInput
+                        style={styles.input}
+                        value={message}
+                        onChangeText={text => { setMessage(text); handleTyping(); }}
+                        placeholder="Type a message..."
+                        placeholderTextColor={THEAMCOLOR.SecondaryBlack}
+                    />
+                    <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                        <Ionicons name="send" size={20} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </KeyboardAvoidingView>
         </View>
     );
 };
 
 export default ChatScreen;
 
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
-    },
+    container: { flex: 1, backgroundColor: THEAMCOLOR.SecondarySmokeWhite },
     header: {
         backgroundColor: '#fff',
         paddingVertical: 10,
         paddingHorizontal: 15,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         borderBottomWidth: 1,
         borderColor: 'lightgray',
     },
@@ -180,22 +167,9 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: THEAMCOLOR.SecondaryGray,
     },
-    info: {
-        flex: 1,
-    },
-    name: {
-        fontWeight: '600',
-        color: THEAMCOLOR.SecondaryBlack,
-        fontSize: TEXT_SIZE.bodyLarge,
-        lineHeight: LINE_HEIGHT.bodyLarge,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    detail: {
-        color: THEAMCOLOR.PrimaryGreen,
-        fontSize: TEXT_SIZE.small,
-        lineHeight: LINE_HEIGHT.small,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
+    info: { flex: 1 },
+    name: { fontSize: 16, fontWeight: '600', color: THEAMCOLOR.SecondaryBlack },
+    detail: { fontSize: 12, color: THEAMCOLOR.PrimaryGreen },
     callButton: {
         width: 40,
         height: 40,
@@ -205,14 +179,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    chatContainer: {
-        flex: 1,
-        paddingHorizontal: 15,
-        paddingTop: 10,
-    },
-    chatContent: {
-        paddingBottom: 20,
-    },
+    chatContainer: { flex: 1, paddingHorizontal: 15, paddingTop: 10 },
+    chatContent: { paddingBottom: 20 },
     messageBubble: {
         maxWidth: width * 0.7,
         padding: 10,
@@ -231,28 +199,10 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#f0f0f0',
     },
-    messageText: {
-        fontSize: TEXT_SIZE.small,
-        lineHeight: LINE_HEIGHT.small,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-        color: '#000',
-    },
-    messageTextWhite: {
-        fontSize: 14,
-        color: '#fff',
-    },
-    messageTime: {
-        fontSize: 10,
-        color: '#666',
-        marginTop: 5,
-        textAlign: 'right',
-    },
-    messageTimeWhite: {
-        fontSize: 10,
-        color: '#fff',
-        marginTop: 5,
-        textAlign: 'right',
-    },
+    messageText: { fontSize: 14, color: '#000' },
+    messageTextWhite: { fontSize: 14, color: '#fff' },
+    messageTime: { fontSize: 10, color: '#666', marginTop: 5, textAlign: 'right' },
+    messageTimeWhite: { fontSize: 10, color: '#fff', marginTop: 5, textAlign: 'right' },
     messageImage: {
         width: 200,
         height: 200,
@@ -267,18 +217,14 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderColor: 'lightgray',
     },
-    mediaButton: {
-        padding: 10,
-    },
+    mediaButton: { padding: 10 },
     input: {
         flex: 1,
         backgroundColor: '#f0f0f0',
         borderRadius: 20,
         paddingHorizontal: 15,
         paddingVertical: 10,
-        fontSize: TEXT_SIZE.small,
-        lineHeight: LINE_HEIGHT.small,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+        fontSize: 14,
         color: THEAMCOLOR.SecondaryBlack,
     },
     sendButton: {
@@ -290,4 +236,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginLeft: 10,
     },
+    typingText: {
+        fontSize: 12,
+        color: THEAMCOLOR.SecondaryWhite,
+        marginLeft: 10
+    }
 });
+

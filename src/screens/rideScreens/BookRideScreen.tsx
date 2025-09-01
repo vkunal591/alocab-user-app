@@ -1,16 +1,28 @@
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View, ToastAndroid, Modal, Image } from 'react-native';
+import {
+    Dimensions,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    ToastAndroid,
+    Modal,
+    Image,
+} from 'react-native';
 import React, { useEffect, useState } from 'react';
-import MapView, { Marker, Polyline } from 'react-native-maps';
-import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
-import BackButton from '../../Components/common/BackButton';
-import { CurrentRenderContext, useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
-import ImagePath from '../../constants/ImagePath';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import apiUtils from '../../utils/apiUtils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
+import ImagePath from '../../constants/ImagePath';
+import apiUtils from '../../utils/apiUtils';
+import CabMap from '../../Components/common/CabMap';
+import BackButton from '../../Components/common/BackButton';
 
 const { width, height } = Dimensions.get('screen');
+
+
 
 export interface Coordinates {
     [0]: number; // latitude
@@ -112,14 +124,40 @@ export const rideStatusColors: Record<RideStatus, string> = {
     [RideStatus.CANCELLED]: '#BFBFBF'    // Gray
 };
 
-
+export const fetchRideDetails = async (setRideDetails: any) => {
+    try {
+        const response: any = await apiUtils.get('/api/ride/detail');
+        if (response?.success) {
+            setRideDetails(response.ride);
+            return response?.ride?.status;
+        } else {
+            ToastAndroid.show(response?.message || 'Failed to fetch ride', ToastAndroid.SHORT);
+            return null;
+        }
+    } catch (error: any) {
+        ToastAndroid.show(error.message || 'Error fetching ride', ToastAndroid.LONG);
+        return null;
+    }
+};
 
 const BookRideScreen = () => {
     const navigation = useNavigation<any>();
+    const route = useRoute<RouteProp<any>>();
+
+    const ride = route.params?.ride;
+    const pickupLocation = route.params?.pickupLocation;
+    const dropLocation = route.params?.dropLocation;
+    const vehicleTypeParam = route.params?.vehicleType;
+    const paymentMethodParam = route.params?.paymentMethod;
+
     const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
     const [selectedReason, setSelectedReason] = useState<string>('');
     const [isReasonModalVisible, setIsReasonModalVisible] = useState(false);
     const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+
+    const isRideCancellable =
+        rideDetails?.status === RideStatus.REQUESTED ||
+        rideDetails?.status === RideStatus.ACCEPTED;
 
     const cancelReasons = [
         { id: '1', label: 'Driver not available' },
@@ -128,38 +166,41 @@ const BookRideScreen = () => {
         { id: '4', label: 'Other' },
     ];
 
-    const pickup = { latitude: 28.6119, longitude: 77.2190 };
-    const dropoff = { latitude: 28.6319, longitude: 77.2290 };
 
-    const isRideCancellable = rideDetails?.status === RideStatus.REQUESTED || rideDetails?.status === RideStatus.ACCEPTED;
 
-    const fetchRideDetails = async () => {
-        try {
-            const response: any = await apiUtils.get('/api/ride/detail');
-            if (response?.success) {
-                setRideDetails(response.ride);
-                console.log('Ride details fetched:', response.ride);
-                return response?.ride?.status;
-            } else {
-                ToastAndroid.show(response?.message || 'Failed to fetch ride details', ToastAndroid.SHORT);
-                return null;
-            }
-        } catch (error: any) {
-            ToastAndroid.show(error.message || 'Error fetching ride details', ToastAndroid.LONG);
-            return null;
-        }
-    };
     useEffect(() => {
-        const getRideDetails = async () => {
-            await fetchRideDetails();
-        };
-        getRideDetails();
+        if (pickupLocation && dropLocation && vehicleTypeParam && paymentMethodParam) {
+            const dynamicRide: RideDetails = {
+                _id: 'temp-id',
+                user: {} as any,
+                pickup: pickupLocation,
+                drops: [dropLocation],
+                status: RideStatus.REQUESTED,
+                isPinVerified: false,
+                pin: 0,
+                vehicleType: vehicleTypeParam,
+                penaltyAmount: 0,
+                paymentMode: paymentMethodParam,
+                promoCode: null,
+                promoCodeDetails: null,
+                createdAt: '',
+                updatedAt: '',
+                __v: 0,
+                distance: ride?.distance ?? 'NA',
+                driver: {} as any,
+                fare: ride?.fare ?? 0,
+                startedAt: '',
+            };
+            setRideDetails(dynamicRide);
+        } else {
+            fetchRideDetails(setRideDetails);
+        }
     }, []);
 
     const handleCancelInitiate = async () => {
-        const status = await fetchRideDetails();
+        const status = await fetchRideDetails(setRideDetails);
         if (status !== RideStatus.REQUESTED && status !== RideStatus.ACCEPTED) {
-            ToastAndroid.show('Ride cannot be cancelled at this time', ToastAndroid.SHORT);
+            ToastAndroid.show('Ride cannot be cancelled now', ToastAndroid.SHORT);
             return;
         }
         setIsReasonModalVisible(true);
@@ -172,8 +213,8 @@ const BookRideScreen = () => {
     };
 
     const handleCancelConfirm = async () => {
-        if (!rideDetails?._id) {
-            ToastAndroid.show('No active ride found', ToastAndroid.SHORT);
+        if (!rideDetails?._id || rideDetails._id === 'temp-id') {
+            ToastAndroid.show('Cannot cancel this ride.', ToastAndroid.SHORT);
             return;
         }
 
@@ -183,15 +224,20 @@ const BookRideScreen = () => {
                 reason: selectedReason,
             };
 
-            const response: any = await apiUtils.post(`/api/ride/cancel/${rideDetails._id}`, payload);
+            const response: any = await apiUtils.post(
+                `/api/ride/cancel/${rideDetails._id}`,
+                payload
+            );
+
             if (response?.success) {
-                ToastAndroid.show('Ride cancelled successfully', ToastAndroid.SHORT);
+                ToastAndroid.show('Ride cancelled', ToastAndroid.SHORT);
                 navigation.navigate('HomeScreen');
             } else {
-                ToastAndroid.show(response?.message || 'Failed to cancel ride', ToastAndroid.SHORT);
+                ToastAndroid.show(response?.message || 'Cancel failed', ToastAndroid.SHORT);
             }
         } catch (error: any) {
-            ToastAndroid.show(error.message || 'Error cancelling ride', ToastAndroid.LONG);
+            console.log(error)
+            ToastAndroid.show(error.message || 'Error cancelling', ToastAndroid.LONG);
         } finally {
             setIsConfirmModalVisible(false);
             setSelectedReason('');
@@ -200,51 +246,57 @@ const BookRideScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <MapView
-                style={styles.map}
-                initialRegion={{
-                    latitude: 28.6219,
-                    longitude: 77.2240,
-                    latitudeDelta: 0.05,
-                    longitudeDelta: 0.05,
-                }}
-            >
-                <Marker coordinate={pickup} pinColor="red" />
-                <Marker coordinate={dropoff} pinColor="green" />
-                <Polyline coordinates={[pickup, dropoff]} strokeColor="#00FF00" strokeWidth={3} />
-            </MapView>
+            <CabMap
+                pickupCoords={
+                    rideDetails?.pickup?.coordinates
+                        ? {
+                            latitude: rideDetails.pickup.coordinates[0],
+                            longitude: rideDetails.pickup.coordinates[1],
+                        }
+                        : null
+                }
+                dropCoords={
+                    rideDetails?.drops[0]?.coordinates
+                        ? {
+                            latitude: rideDetails.drops[0].coordinates[0],
+                            longitude: rideDetails.drops[0].coordinates[1],
+                        }
+                        : null
+                }
+            />
+
             <BackButton />
+
             <View style={styles.spacer} />
+
             <View style={styles.bottomContainer}>
                 <TouchableOpacity style={styles.rideOption}>
                     <Image source={ImagePath.auto} style={styles.rideIcon} />
                     <View style={styles.rideDetails}>
-                        <Text style={styles.rideType}>{rideDetails?.vehicleType?.toUpperCase()}</Text>
+                        <Text style={styles.rideType}>
+                            {rideDetails?.vehicleType?.toUpperCase()}
+                        </Text>
                         <Text
                             style={[
                                 styles.rideInfo,
-                                { backgroundColor: rideStatusColors[rideDetails?.status] }
+                                { backgroundColor: rideStatusColors[rideDetails?.status || RideStatus.REQUESTED] },
                             ]}
                         >
                             {rideDetails?.status?.charAt(0).toUpperCase() + rideDetails?.status?.slice(1)}
                         </Text>
                     </View>
                     <View>
-                        <Text style={styles.ridePrice}>₹ NA</Text>
-                        <Text style={styles.ridePrice}> {rideDetails?.paymentMode?.charAt(0).toUpperCase() + rideDetails?.paymentMode?.slice(1)}</Text>
+                        <Text style={styles.ridePrice}>₹ {rideDetails?.fare || 'NA'}</Text>
+                        <Text style={styles.ridePrice}>
+                            {rideDetails?.paymentMode?.charAt(0).toUpperCase() +
+                                rideDetails?.paymentMode?.slice(1)}
+                        </Text>
                     </View>
                 </TouchableOpacity>
-                <View style={styles.optionsRow}>
-                    <Text style={styles.optionText}>Location Details</Text>
-                    <View style={styles.distanceContainer}>
-                        <Image source={ImagePath.location} style={styles.optionIcon} />
-                        <Text style={styles.optionText}>5.4 Km</Text>
-                    </View>
-                </View>
-                <TouchableOpacity style={styles.pathRow} onPress={async () => {
-                    const status = fetchRideDetails();
 
-                    RideStatus?.ACCEPTED === await status ? navigation.navigate('DriverApprochScreen') : (RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen') : ToastAndroid.show('Ride is not accepted, Please wait for the driver to accept the ride', ToastAndroid.SHORT));
+                <TouchableOpacity style={styles.pathRow} onPress={async () => {
+                    const status = fetchRideDetails(setRideDetails);
+                    RideStatus?.ACCEPTED === await status ? navigation.navigate('DriverApprochScreen', { ride }) : (RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen', { ride }) : ToastAndroid.show('Ride is not accepted, Please wait for the driver to accept the ride', ToastAndroid.SHORT));
                 }}>
                     <View style={styles.iconColumn}>
                         <View style={styles.greenCircle} />
@@ -252,10 +304,17 @@ const BookRideScreen = () => {
                         <View style={styles.redCircle} />
                     </View>
                     <View style={styles.textColumn}>
-                        <Text style={styles.location}>{rideDetails?.pickup?.address}</Text>
-                        <Text style={styles.location}>{rideDetails?.drops[0]?.address}</Text>
+                        <Text numberOfLines={1} style={styles.location}>
+                            {rideDetails?.pickup?.address}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.location}>
+                            {rideDetails?.drops[0]?.address}
+                        </Text>
                     </View>
                 </TouchableOpacity>
+                
+
+                {/* Cancel Button */}
                 <TouchableOpacity
                     style={[styles.bookButton, !isRideCancellable && { opacity: 0.5 }]}
                     onPress={handleCancelInitiate}
@@ -265,13 +324,21 @@ const BookRideScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* Reason Selection Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={isReasonModalVisible}
-                onRequestClose={() => setIsReasonModalVisible(false)}
-            >
+            {/* ✅ Bottom Slider-like Button */}
+            <View style={{ position: 'absolute', bottom: 10, left: 20, right: 20,display:'none' }}>
+                <TouchableOpacity
+                    style={styles.sliderButton}
+                    onPress={() => {
+                        ToastAndroid.show('Ride Confirmed!', ToastAndroid.SHORT);
+                        navigation.navigate('DriverApprochScreen'); // or next screen
+                    }}
+                >
+                    <Text style={styles.bookButtonText}>Slide to Confirm Ride</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Reason Modal */}
+            <Modal animationType="slide" transparent visible={isReasonModalVisible}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity
@@ -297,13 +364,8 @@ const BookRideScreen = () => {
                 </View>
             </Modal>
 
-            {/* Confirmation Modal */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={isConfirmModalVisible}
-                onRequestClose={() => setIsConfirmModalVisible(false)}
-            >
+            {/* Confirm Modal */}
+            <Modal animationType="slide" transparent visible={isConfirmModalVisible}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity
@@ -313,7 +375,6 @@ const BookRideScreen = () => {
                             <Ionicons name="close" size={24} color="#333" />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Confirm Cancellation</Text>
-                        <Text style={styles.radioText}>Are you sure you want to cancel the ride?</Text>
                         <Text style={styles.radioText}>Reason: {selectedReason}</Text>
                         <View style={styles.confirmButtonContainer}>
                             <TouchableOpacity
@@ -337,6 +398,7 @@ const BookRideScreen = () => {
 };
 
 export default BookRideScreen;
+
 
 const styles = StyleSheet.create({
     container: {
@@ -365,9 +427,10 @@ const styles = StyleSheet.create({
     pathRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        backgroundColor: 'rgba(255, 255, 255, 1)',
         borderRadius: 15,
         padding: 15,
+        paddingRight: 40,
         marginHorizontal: 15,
         marginBottom: 10,
         shadowColor: '#000',
@@ -375,6 +438,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 5,
         elevation: 3,
+        overflow: 'hidden'
     },
     iconColumn: {
         alignItems: 'center',
@@ -400,6 +464,7 @@ const styles = StyleSheet.create({
     textColumn: {
         justifyContent: 'space-between',
         height: 60,
+        overflow: "hidden"
     },
     location: {
         fontSize: 12,

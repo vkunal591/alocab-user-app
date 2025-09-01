@@ -200,8 +200,8 @@ const RidesHistoryDetailsScreen = () => {
                 <View style={styles.redCircle} />
               </View>
               <View style={styles.textColumn}>
-                <Text style={styles.locationText}>{rideDetails.pickup.address}</Text>
-                <Text style={styles.locationText}>{rideDetails.drops[0].address}</Text>
+                <Text numberOfLines={1} style={styles.locationText}>{rideDetails.pickup.address}</Text>
+                <Text numberOfLines={1} style={styles.locationText}>{rideDetails.drops[0].address}</Text>
               </View>
             </View>
           </View>

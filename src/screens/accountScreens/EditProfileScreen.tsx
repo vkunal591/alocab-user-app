@@ -20,23 +20,25 @@ import * as ImagePicker from 'react-native-image-picker';
 import BackButton from '../../Components/common/BackButton';
 import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import ImagePath from '../../constants/ImagePath';
+import { useAuth } from '../../context/authcontext';
 
 const { width, height } = Dimensions.get('window');
 
 const EditProfileScreen = () => {
+  const { user }: any = useAuth()
   const navigation = useNavigation();
   const scrollViewRef = useRef(null);
   const inputRefs = useRef({});
   const [profileImage, setProfileImage] = useState('https://i.pravatar.cc/150?img=8');
   const { control, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
-      name: 'Devesh',
-      email: 'deveshdixit@gmail.com',
-      phone: '+91 912834311',
-      gender: '',
-      city: '',
-      dateOfBirth: '',
-      emergencyContact: '',
+      name: user?.name || 'Devesh',
+      email: user?.email || 'deveshdixit@gmail.com',
+      phone: user?.phone || '+91 912834311',
+      gender: user?.gender || '',
+      city: user?.city || '',
+      dateOfBirth: user?.dob || '',
+      emergencyContact: user?.emergencyContact || '',
     },
   });
 
@@ -108,7 +110,7 @@ const EditProfileScreen = () => {
               <Icon name="edit" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.phoneText}>+91 912834311</Text>
+          <Text style={styles.phoneText}>{user?.phone || "NA"}</Text>
         </View>
 
         <View style={styles.form}>

@@ -16,7 +16,7 @@ import {
   ToastAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
 import ImagePath from '../../constants/ImagePath';
 import apiUtils from '../../utils/apiUtils';
@@ -33,6 +33,7 @@ import {
   BREAKPOINT,
   Z_INDEX,
 } from '../../../assets/theam/theam';
+import { useAuth } from '../../context/authcontext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -164,22 +165,29 @@ const OTPInput = React.memo(
 
 const OtpRegisterScreen = () => {
   const navigation = useNavigation<any>();
-  const route = useRoute();
-  const { otp } = route.params;
+  const route: any = useRoute();
+  const phone = route?.params?.phone
+  const confirmation = route?.params?.confirmation;
+  const { otp, resendOtp, verifyOtp, verifyFirebaseApiOtp }: any = useAuth()
   const [otpLocal, setOtpLocal] = useState(otp || "")
   const [loading, setLoading] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState<string>(phone);
   const [resendTimer, setResendTimer] = useState(30);
   const [resendLoading, setResendLoading] = useState(false);
   const { control, handleSubmit, formState: { errors }, reset } = useForm<OtpFormData>();
   const scrollViewRef = useRef<ScrollView>(null);
-
-  // Animation states
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const formTranslateY = useRef(new Animated.Value(50)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
 
-  // Timer logic for resend OTP
+  const verifyFirebaseOtp = async (otpCode: string) => {
+    if (!confirmation) throw new Error('Confirmation object is missing');
+    const userCredential = await confirmation.confirm(otpCode);
+    const idToken = await userCredential.user.getIdToken();
+    console.log(userCredential, idToken)
+    return { user: userCredential.user, idToken };
+  };
+
   useEffect(() => {
     if (resendTimer > 0) {
       const timer = setInterval(() => {
@@ -189,92 +197,46 @@ const OtpRegisterScreen = () => {
     }
   }, [resendTimer]);
 
-  // Fetch phone number from AsyncStorage
-  useEffect(() => {
-    const fetchPhoneNumber = async () => {
-      try {
-        const userData = await AsyncStorage.getItem('user');
-        if (userData) {
-          const user = JSON.parse(userData);
-          setPhoneNumber(user.phoneNumber || '');
-        }
-      } catch (error) {
-        console.error('Failed to fetch user data from AsyncStorage:', error);
-      }
-    };
 
-    fetchPhoneNumber();
 
-    Animated.parallel([
-      Animated.timing(logoOpacity, {
-        toValue: OPACITY.full,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(formTranslateY, {
-        toValue: 0,
-        duration: 600,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    AsyncStorage.getItem('userToken').then((token) => {
-      if (token) {
-        // User is already authenticated, navigate to HomeScreen
-        navigation.replace('HomeScreen');
-      } else {
-        // User is not authenticated, stay on OtpRegisterScreen
-        console.log('User is not authenticated, staying on OtpRegisterScreen');
-      }
-    })
-  }, [navigation, logoOpacity, formTranslateY]);
-
-  const showToastOrAlert = (message: string) => {
-    if (Platform.OS === 'android') {
-      ToastAndroid.show(message, ToastAndroid.LONG);
-    } else {
-      Alert.alert('Notification', message);
-    }
-  };
 
   const handleResendOtp = async () => {
     if (resendTimer > 0 || resendLoading) return;
     setResendLoading(true);
     try {
-      const response = await apiUtils.post<OtpResponse>('/api/passenger/otp', {
-        phoneNumber,
-      });
+      const response = await resendOtp(phoneNumber);
       console.log('Resend OTP Response:', response);
       setOtpLocal(response?.otp)
       setResendTimer(30);
-      showToastOrAlert(response.message || 'OTP resent successfully!');
-      reset({ otp: '' }); // Clear OTP input field
+      reset({ otp: '' });
     } catch (error: any) {
       console.error('Resend OTP Error:', error);
-      showToastOrAlert(error.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setResendLoading(false);
     }
   };
 
+
+
+
   const onSubmit = async (data: OtpFormData) => {
     setLoading(true);
     try {
-      const response: any = await apiUtils.post<VerifyOtpResponse>('/api/passenger/verify-otp', {
-        phoneNumber,
-        otp: data.otp,
-      });
-      if (response || response.token) {
-        await AsyncStorage.setItem('userToken', response.token);
-        await AsyncStorage.setItem('user', JSON.stringify(response.user));
-        navigation.replace('HomeScreen');
+      console.log(data?.otp)
+      const { user, idToken } = await verifyFirebaseOtp(data?.otp)
+      // const verify = await apiUtils.post('/api/driver/verify-user', { idToken });
+      // console.log(verify)
+      const verify: any = await verifyFirebaseApiOtp(idToken);
+      if (verify) {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          })
+        );
       }
-      showToastOrAlert('OTP verified successfully!');
-      // navigation.replace('App', { screen: 'HomeScreen' });
     } catch (error: any) {
-      console.error('OTP Verification Error:', error);
-      showToastOrAlert(error.message || 'Invalid OTP. Please try again.');
+      console.log(error)
     } finally {
       setLoading(false);
     }
@@ -314,14 +276,11 @@ const OtpRegisterScreen = () => {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          <Animated.View style={[styles.logoSection, { opacity: logoOpacity }]}>
-            <Image
-              source={ImagePath?.alocabLogo}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </Animated.View>
-
+          <Image
+            source={ImagePath?.alocabLogo}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Animated.View style={[styles.formContainer, { transform: [{ translateY: formTranslateY }] }]}>
             <Text style={styles.title}>Enter OTP</Text>
             <Text style={styles.subtitle}>OTP sent to: {phoneNumber || 'Loading...'}</Text>
@@ -413,6 +372,7 @@ const styles = StyleSheet.create({
   logo: {
     width: isDesktop ? width * 0.3 : isTablet ? width * 0.4 : width * 0.5,
     height: isDesktop ? height * 0.15 : height * 0.2,
+    marginTop: 16
   },
   formContainer: {
     width: '100%',
@@ -497,7 +457,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEAMCOLOR.PrimaryGreen,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.lg,
-    marginTop: height * 0.35,
+    marginTop: height * 0.2,
     justifyContent: 'center',
     alignItems: 'center',
     width: width * 0.9,
@@ -532,6 +492,8 @@ const styles = StyleSheet.create({
     fontFamily: THEAMFONTFAMILY.NunitoBold,
     color: THEAMCOLOR.PrimaryGreen,
   },
+
+
 });
 
 export default OtpRegisterScreen;

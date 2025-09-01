@@ -18,9 +18,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
+import PhoneInput from 'react-native-phone-number-input';
+import auth from '@react-native-firebase/auth';
+
 import ImagePath from '../../constants/ImagePath';
-import apiUtils from '../../utils/apiUtils';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../../context/authcontext';
 import {
   THEAMCOLOR,
   THEAMFONTFAMILY,
@@ -29,17 +31,13 @@ import {
   SPACING,
   RADIUS,
   SHADOW,
-  OPACITY,
   BREAKPOINT,
   Z_INDEX,
+  OPACITY,
 } from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('window');
-
-// Font scaling function for responsiveness
 const scaleFont = (size: number) => Math.round(size * Math.min(width / 375, 1.5));
-
-// Breakpoints
 const isTablet = width >= BREAKPOINT.tablet;
 const isDesktop = width >= BREAKPOINT.desktop;
 
@@ -49,32 +47,17 @@ interface RegisterFormData {
   phone: string;
 }
 
-interface RegisterResponse {
-  token: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    phoneNumber: string;
-  };
-}
-
-interface OtpResponse {
-  message: string;
-}
-
 const RegisterScreen = () => {
+  const { register }: any = useAuth();
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(false);
   const { control, handleSubmit, formState: { errors } } = useForm<RegisterFormData>();
   const scrollViewRef = useRef(null);
-
-  // Animation states
+  const phoneInputRef = useRef<any>(null);
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const formTranslateY = useRef(new Animated.Value(50)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
 
-  // Check auth state and redirect if authenticated
   useEffect(() => {
     Animated.parallel([
       Animated.timing(logoOpacity, {
@@ -89,76 +72,62 @@ const RegisterScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
+  }, []);
 
-    AsyncStorage.getItem('userToken').then((token) => {
-      if (token) {
-        navigation.replace('LoginScreen');
-      }
-    })
-  }, [navigation, logoOpacity, formTranslateY]);
-
-  const showToastOrAlert = (message: string) => {
+  const showToast = (message: string) => {
     if (Platform.OS === 'android') {
       ToastAndroid.show(message, ToastAndroid.LONG);
     } else {
-      Alert.alert('Notification', message);
+      Alert.alert('Error', message);
     }
   };
 
   const onSubmit = async (data: RegisterFormData) => {
-    setLoading(true);
     try {
-      // Step 1: Register the user
-      const registerResult = await apiUtils.post<RegisterResponse>('/api/passenger/register', {
-        name: data.name,
-        email: data.email,
-        phoneNumber: data.phone,
-      });
+      setLoading(true);
+      const fullPhoneNumber = data.phone;
 
-      // Store the token and user data in AsyncStorage
-      // await AsyncStorage.setItem('authToken', registerResult.token);
-      await AsyncStorage.setItem('user', JSON.stringify(registerResult.user));
+      if (!phoneInputRef.current?.isValidNumber(fullPhoneNumber)) {
+        showToast('Please enter a valid phone number.');
+        return;
+      }
 
-      // Update AuthContext with the token
-      // await login(registerResult.token);
+      const confirmation: any = await auth().signInWithPhoneNumber(fullPhoneNumber);
+      const uid = confirmation?._auth?._user?._user?.uid;
+      if (!uid) {
+        throw new Error('Failed to get user UID from authentication')
+      }
+      const res = await register({ ...data, phone: fullPhoneNumber, uid });
+      console.log(res)
+      if (res) {
+        showToast(`OTP sent to ${fullPhoneNumber}`);
+        navigation.navigate('OtpRegisterScreen', { phone: fullPhoneNumber, confirmation });
+      } else {
+        showToast('Registration failed. Please try again.');
+      }
 
-      // Step 2: Send OTP using the token
-      const otpResult = await apiUtils.post<OtpResponse>('/api/passenger/otp', {
-        phoneNumber: data.phone,
-      });
-      console.log(otpResult)
-      showToastOrAlert(otpResult.message || 'Registration successful! OTP sent.');
-      navigation.navigate('OtpRegisterScreen', { otp: otpResult?.otp });
-    } catch (error: any) {
-      console.error('Registration/OTP Error:', error);
-      showToastOrAlert(error.message || 'Registration or OTP request failed. Please try again.');
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      showToast(err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleButtonPress = handleSubmit(onSubmit);
-
   const handleSocialLogin = (provider: string) => {
-    showToastOrAlert(`${provider} login is not implemented yet.`);
-  };
-
-  const scrollToInput = (y: number) => {
-    scrollViewRef.current?.scrollTo({ y, animated: true });
+    showToast(`${provider} login is not implemented yet.`);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Modal
-        transparent
-        animationType="fade"
-        visible={loading}
-        style={{ zIndex: Z_INDEX.modal }}
-      >
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={THEAMCOLOR.PrimaryGreen} />
-        </View>
-      </Modal>
+      {loading && (
+        <Modal transparent animationType="fade" visible={loading}>
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={THEAMCOLOR.PrimaryGreen} />
+          </View>
+        </Modal>
+      )}
+
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollContent}
@@ -166,11 +135,7 @@ const RegisterScreen = () => {
       >
         <View style={styles.container}>
           <Animated.View style={[styles.logoSection, { opacity: logoOpacity }]}>
-            <Image
-              source={ImagePath?.alocabLogo}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <Image source={ImagePath.alocabLogo} style={styles.logo} resizeMode="contain" />
           </Animated.View>
 
           <Animated.View style={[styles.formContainer, { transform: [{ translateY: formTranslateY }] }]}>
@@ -178,116 +143,116 @@ const RegisterScreen = () => {
             <Text style={styles.subtitle}>Enter your details</Text>
 
             <View style={styles.form}>
-              {/* Name Input */}
+              {/* Name */}
               <Controller
                 control={control}
+                name="name"
                 rules={{ required: 'Name is required' }}
                 render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={styles.inputWrapper}>
-                    <Image source={ImagePath?.name} style={styles.inputIcon} />
-                    <View style={styles.line} />
-                    <TextInput
-                      style={[styles.input, errors.name && styles.inputError]}
-                      placeholder="Enter your name"
-                      placeholderTextColor={THEAMCOLOR.SecondaryGray}
-                      value={value}
-                      onBlur={onBlur}
-                      onChangeText={onChange}
-                      onFocus={(e) => scrollToInput(e.nativeEvent.target)}
-                    />
+                  <View>
+                    <View style={styles.inputWrapper}>
+                      <Image source={ImagePath.name} style={styles.inputIcon} />
+                      <View style={styles.line} />
+                      <TextInput
+                        style={[styles.input, errors.name && styles.inputError]}
+                        placeholder="Enter your name"
+                        placeholderTextColor={THEAMCOLOR.SecondaryGray}
+                        value={value}
+                        onBlur={onBlur}
+                        onChangeText={onChange}
+                      />
+                    </View>
+                    {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
                   </View>
                 )}
-                name="name"
               />
-              {errors.name?.message && <Text style={styles.errorText}>{errors.name.message}</Text>}
 
-              {/* Email Input */}
+              {/* Email */}
               <Controller
                 control={control}
+                name="email"
                 rules={{
                   required: 'Email is required',
                   pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i,
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                     message: 'Invalid email address',
                   },
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={styles.inputWrapper}>
-                    <Image source={ImagePath?.email} style={styles.inputIcon} />
-                    <View style={styles.line} />
-                    <TextInput
-                      style={[styles.input, errors.email && styles.inputError]}
-                      placeholder="Enter your email"
-                      placeholderTextColor={THEAMCOLOR.SecondaryGray}
-                      value={value}
-                      onBlur={onBlur}
-                      onChangeText={onChange}
-                      onFocus={(e) => scrollToInput(e.nativeEvent.target)}
-                    />
+                  <View>
+                    <View style={styles.inputWrapper}>
+                      <Image source={ImagePath.email} style={styles.inputIcon} />
+                      <View style={styles.line} />
+                      <TextInput
+                        style={[styles.input, errors.email && styles.inputError]}
+                        placeholder="Enter your email"
+                        placeholderTextColor={THEAMCOLOR.SecondaryGray}
+                        value={value}
+                        onBlur={onBlur}
+                        onChangeText={onChange}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
+                    {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
                   </View>
                 )}
-                name="email"
               />
-              {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
 
-              {/* Phone Input */}
+              {/* Phone */}
               <Controller
                 control={control}
-                rules={{
-                  required: 'Phone number is required',
-                  pattern: {
-                    value: /^\d{10}$/, // Only digits, exactly 10
-                    message: 'Phone number must be exactly 10 digits',
-                  },
-                }} render={({ field: { onChange, onBlur, value } }) => (
-                  <View style={styles.inputWrapper}>
-                    <Image source={ImagePath?.phone} style={styles.inputIcon} />
-                    <View style={styles.line} />
-                    <TextInput
-                      style={[styles.input, errors.phone && styles.inputError]}
-                      placeholder="Enter your phone number"
-                      placeholderTextColor={THEAMCOLOR.SecondaryGray}
-                      value={value}
-                      onBlur={onBlur}
-                      onChangeText={(text) => {
-                        // Allow only digits
-                        const filteredText = text.replace(/[^0-9]/g, '');
-                        onChange(filteredText);
-                      }}
-                      keyboardType="number-pad"
-                      onFocus={(e) => scrollToInput(e.nativeEvent.target)}
-                      maxLength={10} // prevent typing more than 10 digits
-                    />
+                name="phone"
+                rules={{ required: 'Phone number is required' }}
+                render={({ field: { value, onChange } }) => (
+                  <View>
+                    <View style={styles.inputWrapper}>
+                      <PhoneInput
+                        ref={phoneInputRef}
+                        defaultValue={value}
+                        defaultCode="IN"
+                        layout="second"
+                        onChangeFormattedText={onChange}
+                        withShadow
+                        disableArrowIcon={true}
+                        containerStyle={{ flex: 1, backgroundColor: THEAMCOLOR.SecondarySmokeWhite }}
+                        textContainerStyle={{
+                          paddingVertical: 0,
+                          backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+                        }}
+                        countryPickerButtonStyle={{
+                          paddingVertical: 10,
+                          borderRightColor: THEAMCOLOR.BorderGray,
+                          borderRightWidth: 1,
+                          width: 50,
+                          paddingLeft: 5,
+                          backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+                        }}
+                      />
+                    </View>
+                    {errors.phone && <Text style={styles.errorText}>{errors.phone.message}</Text>}
                   </View>
                 )}
-                name="phone"
               />
-              {errors.phone && <Text style={styles.errorText}>{errors.phone.message}</Text>}
 
-              {/* Register with Google/Apple */}
+              {/* Social login */}
               <Text style={styles.orRegister}>Or register with</Text>
               <View style={styles.socialButtons}>
-                <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialLogin('Google')}
-                >
-                  <Image source={ImagePath?.google} style={styles.socialIcon} />
+                <TouchableOpacity style={styles.socialButton} onPress={() => handleSocialLogin('Google')}>
+                  <Image source={ImagePath.google} style={styles.socialIcon} />
                   <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialLogin('Apple')}
-                >
-                  <Image source={ImagePath?.apple} style={styles.socialIcon} />
+                <TouchableOpacity style={styles.socialButton} onPress={() => handleSocialLogin('Apple')}>
+                  <Image source={ImagePath.apple} style={styles.socialIcon} />
                   <Text style={styles.socialText}>Apple Id</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Submit Button */}
+              {/* Submit */}
               <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
                 <TouchableOpacity
                   style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                  onPress={handleButtonPress}
+                  onPress={handleSubmit(onSubmit)}
                   disabled={loading}
                 >
                   <Text style={styles.submitButtonText}>Send OTP</Text>
@@ -295,12 +260,9 @@ const RegisterScreen = () => {
               </Animated.View>
             </View>
 
-            {/* Footer Text */}
             <View style={styles.footerText}>
               <Text style={styles.loginLink}>Already have an account?</Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('LoginScreen')}
-              >
+              <TouchableOpacity onPress={() => navigation.navigate('LoginScreen')}>
                 <Text style={styles.loginText}>Login</Text>
               </TouchableOpacity>
             </View>
@@ -310,6 +272,9 @@ const RegisterScreen = () => {
     </SafeAreaView>
   );
 };
+
+export default RegisterScreen;
+
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -379,6 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.md,
     backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+    overflow: 'hidden'
   },
   input: {
     height: 50,
@@ -391,11 +357,11 @@ const styles = StyleSheet.create({
     color: THEAMCOLOR.SecondaryBlack,
   },
   line: {
-    width: 1,
-    height: '60%',
+    width: 1.5,
+    height: '100%',
     backgroundColor: THEAMCOLOR.BorderGray,
     borderRadius: RADIUS.sm,
-    marginRight: SPACING.md,
+    marginLeft: SPACING.md,
   },
   inputIcon: {
     width: scaleFont(20),
@@ -486,4 +452,3 @@ const styles = StyleSheet.create({
   },
 });
 
-export default RegisterScreen;

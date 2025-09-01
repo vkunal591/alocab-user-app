@@ -1,6 +1,5 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_TIMEOUT } from '@env'; // ← Use @env to import
 
 // Define types for API responses and errors
 interface ApiError {
@@ -8,25 +7,31 @@ interface ApiError {
     status?: number;
 }
 
-// const API_BASE_URL = process.env.API_BASE_URL || 'https://api.example.com';
-// const API_TIMEOUT = process.env.API_TIMEOUT || '10000';
+export const API_BASE_URL = process.env.API_BASE_URL || 'https://api-alocab.wayone.site';
+const API_TIMEOUT = process.env.API_TIMEOUT || '10000';
 
 // Base configuration for Axios
 const apiClient = axios.create({
-    baseURL:"https://api-alocab.wayone.site",// API_BASE_URL || 'https://api.example.com', // Fallback if env variable is not set
-    timeout: parseInt(API_TIMEOUT || '10000', 10), // Convert string to number, default to 10000ms
+    baseURL: API_BASE_URL,
+    timeout: parseInt(API_TIMEOUT, 10),
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
 // Request interceptor to add auth token from AsyncStorage
+import type { InternalAxiosRequestConfig } from 'axios';
+
 apiClient.interceptors.request.use(
-    async (config: AxiosRequestConfig) => {
+    async (config: InternalAxiosRequestConfig) => {
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            const token = await AsyncStorage.getItem('authToken');
             if (token && config.headers) {
                 config.headers.Authorization = `Bearer ${token}`;
+            }
+            // Ensure Content-Type is set correctly for FormData
+            if (config.data instanceof FormData) {
+                config.headers['Content-Type'] = 'multipart/form-data';
             }
         } catch (error) {
             console.warn('Failed to retrieve token from AsyncStorage:', error);
@@ -41,19 +46,15 @@ apiClient.interceptors.request.use(
 // Response interceptor for handling errors
 apiClient.interceptors.response.use(
     (response: AxiosResponse) => {
-        return response.data; // Return only the data part of the response
+        return response; // Return the full response
     },
     (error: any) => {
-        // Handle common error cases
         if (error.response) {
-            // Server responded with a status other than 2xx
             const errorMessage = error.response.data?.message || 'An error occurred';
             return Promise.reject({ message: errorMessage, status: error.response.status } as ApiError);
         } else if (error.request) {
-            // No response received
             return Promise.reject({ message: 'No response from server. Please check your network.' } as ApiError);
         } else {
-            // Other errors
             return Promise.reject({ message: `Request setup error: ${error.message}` } as ApiError);
         }
     }
@@ -61,52 +62,70 @@ apiClient.interceptors.response.use(
 
 // API utility functions
 const apiUtils = {
-    // GET request
     get: async <T>(endpoint: string, params: Record<string, any> = {}): Promise<T> => {
         try {
-            return await apiClient.get<T>(endpoint, { params });
+            console.log('GET request:', API_BASE_URL, endpoint, params);
+            const response = await apiClient.get<T>(endpoint, { params });
+            return response.data;
         } catch (error) {
             throw error as ApiError;
         }
     },
 
-    // POST request
     post: async <T>(endpoint: string, data: Record<string, any> = {}): Promise<T> => {
         try {
-            console.log('POST request data:', API_BASE_URL,endpoint,data);
-            return await apiClient.post<T>(endpoint, data);
+            console.log('POST request:', API_BASE_URL, endpoint, data);
+            const response = await apiClient.post<T>(endpoint, data);
+            return response.data;
         } catch (error) {
             throw error as ApiError;
         }
     },
 
-    // PUT request
     put: async <T>(endpoint: string, data: Record<string, any> = {}): Promise<T> => {
         try {
-            return await apiClient.put<T>(endpoint, data);
+            console.log('PUT request:', API_BASE_URL, endpoint, data);
+            const response = await apiClient.put<T>(endpoint, data);
+            return response.data;
         } catch (error) {
             throw error as ApiError;
         }
     },
 
-    // DELETE request
+    // New method for file uploads
+    upload: async <T>(endpoint: string, formData: FormData): Promise<T> => {
+        try {
+            console.log('UPLOAD request:', API_BASE_URL, endpoint, formData);
+            const response = await apiClient.put<T>(endpoint, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+            return response.data;
+        } catch (error) {
+            throw error as ApiError;
+        }
+    },
+
     delete: async <T>(endpoint: string): Promise<T> => {
         try {
-            return await apiClient.delete<T>(endpoint);
+            console.log('DELETE request:', API_BASE_URL, endpoint);
+            const response = await apiClient.delete<T>(endpoint);
+            return response.data;
         } catch (error) {
             throw error as ApiError;
         }
     },
 
-    // PATCH request
     patch: async <T>(endpoint: string, data: Record<string, any> = {}): Promise<T> => {
         try {
-            return await apiClient.patch<T>(endpoint, data);
+            console.log('PATCH request:', API_BASE_URL, endpoint, data);
+            const response = await apiClient.patch<T>(endpoint, data);
+            return response.data;
         } catch (error) {
             throw error as ApiError;
         }
     },
 };
 
-// Export the utility
 export default apiUtils;

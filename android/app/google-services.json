@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "736075974069",
+    "project_id": "alocab-fb8cb",
+    "storage_bucket": "alocab-fb8cb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736075974069:android:6db20409c1c540aead05fc",
+        "android_client_info": {
+          "package_name": "com.alocab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVKbQaMIQkYuRcpU760yAvO-tOZiwp-nk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736075974069:android:761ac999396670f6ad05fc",
+        "android_client_info": {
+          "package_name": "com.alocabrider"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVKbQaMIQkYuRcpU760yAvO-tOZiwp-nk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

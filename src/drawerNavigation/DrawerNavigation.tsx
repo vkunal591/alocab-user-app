@@ -8,16 +8,19 @@ import { LINE_HEIGHT, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../asset
 import HomeStackNatigator from '../navigator/HomeStackNatigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { set } from 'react-hook-form';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/authcontext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width } = Dimensions.get('screen')
 
 // Custom Drawer Content
 function CustomDrawerContent(props: any) {
-    const [user, setUser] = useState<any>()
-
+    const { user }: any = useAuth()
+    console.log(user)
     const handleLogout = async () => {
         try {
-            await AsyncStorage.multiRemove(['userToken', 'userData']);
+            await AsyncStorage.multiRemove(['authToken', 'userData']);
             props.navigation.closeDrawer();
             props.navigation.navigate('LoginScreen'); // Assuming you have a LoginScreen
         } catch (error: any) {
@@ -30,7 +33,7 @@ function CustomDrawerContent(props: any) {
     useEffect(() => {
         const fetchUserData = async () => {
             const userData = await AsyncStorage.getItem('user');
-            setUser(userData);
+            // setUser(userData);
         };
         fetchUserData();
     }, []);
@@ -38,33 +41,32 @@ function CustomDrawerContent(props: any) {
         <DrawerContentScrollView {...props}>
             {/* Profile Section */}
             <View style={styles.profileContainer}>
-                <Image
-                    source={{
-                        uri: 'https://i.pravatar.cc/150?img=8'
-                    }}
-                    style={styles.profileImage}
-                    defaultSource={{ uri: 'https://i.pravatar.cc/150?img=8' }} // Add a default profile image in ImagePath
-                />
+                <TouchableOpacity
+                    onPress={() => props.navigation.navigate('AccountScreen')}
+                    style={{ position: 'relative', zIndex: 5 }}
+                // disabled={isLoading}
+                >
+                    <Image
+                        source={{
+                            uri: 'https://i.pravatar.cc/150?img=8'
+                        }}
+                        style={styles.profileImage}
+                        defaultSource={{ uri: 'https://i.pravatar.cc/150?img=8' }} // Add a default profile image in ImagePath
+                    />
+                </TouchableOpacity>
                 <View style={styles.profileTextContainer}>
-                    <TouchableOpacity
-                        onPress={() => props.navigation.navigate('AccountScreen')}
-                        style={{ position: 'relative', zIndex: 5 }}
-                    // disabled={isLoading}
-                    >
-                        <Image source={ImagePath.edit} style={styles.edit} />
-                    </TouchableOpacity>
                     <Text style={styles.profileName}>
                         {user?.name || 'Guest User'}
                     </Text>
                     <Text style={styles.profilePhone}>
                         {user?.phoneNumber || 'Not provided'}
                     </Text>
-                    <View style={styles.ratingContainer}>
+                    {/* <View style={styles.ratingContainer}>
                         <Text style={styles.ratedText}>Rated </Text>
                         {[...Array(5)].map((_, index) => (
                             <Icon key={index} name="star" size={16} color="#FFB700" />
                         ))}
-                    </View>
+                    </View> */}
                 </View>
             </View>
 
@@ -104,7 +106,7 @@ function CustomDrawerContent(props: any) {
                 )}
                 labelStyle={styles.drawerLabel}
             />
-            <DrawerItem
+            {/* <DrawerItem
                 label="Payment"
                 onPress={() => props.navigation.navigate('PaymentScreen')}
                 icon={({ focused }) => (
@@ -119,7 +121,7 @@ function CustomDrawerContent(props: any) {
                     />
                 )}
                 labelStyle={styles.drawerLabel}
-            />
+            /> */}
             <DrawerItem
                 label="Security Central"
                 onPress={() => props.navigation.navigate('SecurityCentralScreen')}
@@ -199,31 +201,14 @@ function CustomDrawerContent(props: any) {
 const Drawer = createDrawerNavigator();
 
 export default function DrawerNavigation() {
-    const [user, setUser] = useState<any>();
+    const { user }: any = useAuth()
+    const navigation = useNavigation()
     const [isLoading, setIsLoading] = useState(false)
-    useEffect(() => {
-        const fetchUserData = async () => {
-            setIsLoading(true);
-            try {
-                const userData = await AsyncStorage.getItem('userData');
-                if (userData) {
-                    setUser(JSON.parse(userData));
-                    setIsLoading(false);
-                } else {
-                    setUser(null);
-                    setIsLoading(false);
-                }
-            } catch (error) {
-                console.error('Failed to load user data:', error);
-                setUser(null);
-                setIsLoading(false);
-            }
-        };
-        fetchUserData();
-    }, []);
+
     const logout = async () => {
         try {
-            await AsyncStorage.multiRemove(['userToken', 'userData']);
+            await AsyncStorage.clear;
+            navigation.navigate('LoginScreen')
             ToastAndroid.show('Logged out successfully', ToastAndroid.SHORT);
         } catch (error: any) {
             ToastAndroid.show(
@@ -333,7 +318,7 @@ const styles = StyleSheet.create({
     },
     profilePhone: {
         color: '#666666',
-        marginVertical: 4,
+        marginVertical: 0,
         fontSize: TEXT_SIZE.small,
         lineHeight: LINE_HEIGHT.small,
         fontFamily: THEAMFONTFAMILY.NunitoSemiBold,

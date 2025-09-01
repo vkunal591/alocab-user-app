@@ -1,112 +1,176 @@
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View, ScrollView, Image, Modal, ToastAndroid } from 'react-native';
-import React, { useState, useRef } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline } from 'react-native-maps';
-import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
-import BackButton from '../../Components/common/BackButton';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import React, { useRef, useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Modal,
+  Image,
+  ToastAndroid,
+  Animated,
+} from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
+import MapViewDirections from 'react-native-maps-directions';
 import LinearGradient from 'react-native-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ImagePath from '../../constants/ImagePath';
-import { RouteDetails } from '../../(tabs)/HomeScreen';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import apiUtils from '../../utils/apiUtils';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 const { width, height } = Dimensions.get('screen');
+const COLLAPSED_HEIGHT = 160;
+const EXPANDED_HEIGHT = height * 0.43;
 
-const savedDestinations = [
-  {
-    id: '1',
-    label: 'Home',
-    address: '223, A Pocket, Dwarka, New Delhi',
-    coordinates: { lat: 28.5916, lng: 77.0460 },
-  },
-  {
-    id: '2',
-    label: 'Work',
-    address: 'E 89, Kamla Nagar, Delhi',
-    coordinates: { lat: 28.6863, lng: 77.2089 },
-  },
-  {
-    id: '3',
-    label: 'Gym',
-    address: '12, Rajouri Garden, New Delhi',
-    coordinates: { lat: 28.6425, lng: 77.1225 },
-  },
-  {
-    id: '4',
-    label: "Friend's Place",
-    address: '55, Saket, New Delhi',
-    coordinates: { lat: 28.5286, lng: 77.2204 },
-  },
-  {
-    id: '5',
-    label: "Parents' House",
-    address: '103, Rohini Sector 9, New Delhi',
-    coordinates: { lat: 28.7294, lng: 77.1276 },
-  },
-  {
-    id: '6',
-    label: 'Mall',
-    address: '3rd Floor, Select Citywalk, Saket, New Delhi',
-    coordinates: { lat: 28.5273, lng: 77.2195 },
-  },
-];
+const THEAMCOLOR = {
+  PrimaryGreen: '#4CAF50',
+  PrimaryRed: '#FF3D00',
+};
+
+// Mock reverse geocoding
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`), 500)
+  );
+}
 
 const RideSelectionScreen = () => {
-  const navigation = useNavigation<any>();
-  const route = useRoute();
-  const scrollViewRef = useRef(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [locationType, setLocationType] = useState(null); // To track pickup or drop-off selection
-  const [selectedRide, setSelectedRide] = useState('auto');
-  const [selectedPayment, setSelectedPayment] = useState('Cash');
+  const navigation: any = useNavigation()
+  const isFocused = useIsFocused()
+  const route: any = useRoute();
+  const picup = route.params?.picup;
+  const drop = route.params?.drop;
   const [pickupLocation, setPickupLocation] = useState(
-    route.params?.pickupLocation || {
-      address: '223, A Pocket, Dwarka, New Delhi',
-      coordinates: { latitude: 28.6119, longitude: 77.2190 },
+    picup ?? {
+      address: 'Initial Pickup',
+      coordinates: { latitude: 28.61, longitude: 77.2 },
     }
   );
   const [dropLocation, setDropLocation] = useState(
-    route.params?.dropLocation || {
-      address: 'E 99, Kamla Nagar, Delhi',
-      coordinates: { latitude: 28.6319, longitude: 77.2290 },
+    drop ?? {
+      address: 'Initial Drop',
+      coordinates: { latitude: 28.625, longitude: 77.215 },
     }
   );
+  const [distance, setDistance] = useState<number | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [locationType, setLocationType] = useState<'pickup' | 'drop' | null>(null);
+  const [selectedRide, setSelectedRide] = useState<'auto'>('auto');
+  const [selectedPayment, setSelectedPayment] = useState<'cash' | 'online'>('cash');
+  const [savedDestinations, setSavedDestinations] = useState<any>(null)
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false)
+  const mapRef = useRef<MapView>(null);
+  const [fareData, setFareData] = useState<{ fare: string; distance_km: string; duration_min: string, vehicleType: string } | null>(null);
+  const [loadingFare, setLoadingFare] = useState(false);
+  const maxTranslateY = EXPANDED_HEIGHT - COLLAPSED_HEIGHT;
+  const pan = useRef(new Animated.Value(maxTranslateY)).current;
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const rideOptions = [
-    { type: 'auto', eta: '4 min away', dropTime: '3:44', price: 122, icon: ImagePath.auto },
-    // Add other ride options as needed
-  ];
 
-  const paymentOptions = [
-    { id: 'cash', label: 'Cash', icon: ImagePath.money },
-    { id: 'online', label: 'Online', icon: ImagePath.upi },
-    // { id: 'PhonePay', label: 'PhonePay', icon: ImagePath.phonepay },
-    // { id: 'GPay', label: 'GPay', icon: ImagePath.gpay },
-    // { id: 'Wallet', label: 'Wallet', icon: ImagePath.wallet2 },
-    // { id: 'Card', label: 'Card', icon: ImagePath.card },
-  ];
+  const fetchFare = async (vehicleType: string) => {
+    if (!pickupLocation || !dropLocation) return;
 
-  const selectedPaymentIcon = paymentOptions.find((option) => option.id === selectedPayment)?.icon || ImagePath.money;
+    setLoadingFare(true);
+    try {
+      const response = await apiUtils.post('/api/fare/farebydistance', {
+        pickup: pickupLocation.coordinates,
+        drop: dropLocation.coordinates,
+        vehicleType,
+      });
 
-  const handleSelectLocation = (destination) => {
-    const newLocation = {
-      address: destination.address,
-      coordinates: { latitude: destination.coordinates.lat, longitude: destination.coordinates.lng },
-    };
-    if (locationType === 'pickup') {
-      setPickupLocation(newLocation);
-    } else if (locationType === 'drop') {
-      setDropLocation(newLocation);
+      const result: any = await response;
+      console.log(result)
+      if (response) {
+        setFareData({
+          fare: result.fare,
+          distance_km: result.distance_km,
+          duration_min: result.duration_min,
+          vehicleType: result?.vehicleType
+        });
+      } else {
+        ToastAndroid.show(result.error || 'Failed to calculate fare', ToastAndroid.SHORT);
+      }
+    } catch (error) {
+      console.log(error)
+      ToastAndroid.show('Error fetching fare', ToastAndroid.SHORT);
+    } finally {
+      setLoadingFare(false);
     }
-    setModalVisible(false);
-    setLocationType(null);
   };
 
-  const openSavedDestinations = (type) => {
-    setLocationType(type);
-    setModalVisible(true);
+
+  const fetchRide = async (isRiding = false) => {
+    try {
+      const url = "/api/ride/active/ride"
+      const response: any = await apiUtils.get(url);
+      console.log(response)
+      // if (response.success && (response.rides?.length || response.data)) {
+      //   setRides(response.rides ?? [response.data]);
+      //   setCurrentIndex(0);
+      // } else {
+      //   setRides([]);
+      // }
+    } catch (error) {
+      console.log(error)
+      ToastAndroid.show('Failed to fetch rides', ToastAndroid.SHORT);
+    }
+  };
+
+  // Toggle bottom sheet on tap of drag handle
+  const toggleBottomSheet = () => {
+    const toValue = isExpanded ? maxTranslateY : 0;
+    Animated.timing(pan, {
+      toValue,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsExpanded(!isExpanded);
+    });
+  };
+
+  const rideOptions = [{ type: 'auto', eta: '3 min', price: 120, icon: ImagePath.auto }];
+  const paymentIcon = selectedPayment === 'cash' ? ImagePath.money : ImagePath.upi;
+
+  const handleDragMarker = async (
+    type: 'pickup' | 'drop',
+    coord: { latitude: number; longitude: number }
+  ) => {
+    const addr = await reverseGeocode(coord.latitude, coord.longitude);
+    const updated = { address: addr, coordinates: coord };
+    type === 'pickup' ? setPickupLocation(updated) : setDropLocation(updated);
+  };
+
+  const handleGetSaveLocation = async () => {
+    setIsLoadingSaved(true);
+    try {
+      const response: any = await apiUtils.get('/api/location');
+      if (response?.success) {
+        setSavedDestinations(response?.data); // Uncomment when API is ready
+      } else {
+        ToastAndroid.show('Failed to fetch saved locations', ToastAndroid.SHORT);
+      }
+    } catch {
+      ToastAndroid.show('Error fetching saved locations', ToastAndroid.SHORT);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  };
+
+
+  const handleSelectLocation = (loc: any) => {
+    if (locationType === 'pickup') setPickupLocation(loc);
+    else if (locationType === 'drop') setDropLocation(loc);
+    setModalVisible(false);
+  };
+
+  const handleBook = () => {
+    if (!pickupLocation || !dropLocation) {
+      ToastAndroid.show('Select both locations', ToastAndroid.SHORT);
+      return;
+    }
+    ToastAndroid.show('Ride booked!', ToastAndroid.SHORT);
   };
 
   const handleBookRide = async () => {
@@ -142,184 +206,219 @@ const RideSelectionScreen = () => {
       if (response?.success) {
         ToastAndroid.show('Ride booked successfully!', ToastAndroid.SHORT);
 
-        navigation.navigate('BookRideScreen', {
+        navigation.replace('BookRideScreen', {
           pickupLocation,
           dropLocation,
           vehicleType: selectedRide,
           paymentMethod: selectedPayment,
+          ride: response?.ride
         });
       } else {
-       ToastAndroid.show(response?.message || 'Failed to book ride',ToastAndroid.SHORT);
+        ToastAndroid.show(response?.message || 'Failed to book ride', ToastAndroid.SHORT);
       }
-    } catch (error:any) {
+    } catch (error: any) {
       console.error('Error booking ride:', error);
       // Type guard for error handling
       const errorMessage = error.message
       ToastAndroid.show(errorMessage, ToastAndroid.LONG)
-      navigation.navigate('BookRideScreen');
+      // navigation.navigate('BookRideScreen');
     }
   };
+
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initialize = async () => {
+      try {
+        await handleGetSaveLocation();
+      } catch {
+        ToastAndroid.show('Initialization failed', ToastAndroid.SHORT);
+      }
+    };
+
+    initialize();
+
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (pickupLocation && dropLocation && selectedRide) {
+      fetchFare(selectedRide);
+    }
+  }, [pickupLocation, dropLocation, selectedRide]);
+
 
   return (
     <SafeAreaView style={styles.container}>
       <MapView
-        style={styles.map}
-        region={{
-          latitude: (pickupLocation.coordinates.latitude + dropLocation.coordinates.latitude) / 2,
-          longitude: (pickupLocation.coordinates.longitude + dropLocation.coordinates.longitude) / 2,
-          latitudeDelta: Math.abs(pickupLocation.coordinates.latitude - dropLocation.coordinates.latitude) * 2 || 0.05,
-          longitudeDelta: Math.abs(pickupLocation.coordinates.longitude - dropLocation.coordinates.longitude) * 2 || 0.05,
+        ref={mapRef}
+        style={StyleSheet.absoluteFillObject}
+        initialRegion={{
+          latitude: pickupLocation?.coordinates.latitude ?? 28.617,
+          longitude: pickupLocation?.coordinates.longitude ?? 77.208,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
         }}
       >
-        <Marker coordinate={pickupLocation.coordinates} pinColor="green" title="Pickup" description={pickupLocation.address} />
-        <Marker coordinate={dropLocation.coordinates} pinColor="red" title="Drop-off" description={dropLocation.address} />
-        <Polyline coordinates={[pickupLocation.coordinates, dropLocation.coordinates]} strokeColor="#00FF00" strokeWidth={3} />
+        <Marker
+          coordinate={pickupLocation.coordinates}
+          pinColor="green"
+          draggable
+          onDragEnd={(e) => handleDragMarker('pickup', e.nativeEvent.coordinate)}
+        />
+        <Marker
+          coordinate={dropLocation.coordinates}
+          pinColor="red"
+          draggable
+          onDragEnd={(e) => handleDragMarker('drop', e.nativeEvent.coordinate)}
+        />
+
+        <MapViewDirections
+          origin={pickupLocation.coordinates}
+          destination={dropLocation.coordinates}
+          apikey={`${process.env.MAPS_API_KEY}`}
+          strokeWidth={4}
+          strokeColor={THEAMCOLOR.PrimaryGreen}
+          onReady={(result) => {
+            mapRef.current?.fitToCoordinates(result.coordinates, {
+              edgePadding: { top: 100, bottom: 100, left: 50, right: 50 },
+              animated: true,
+            });
+            console.log(result)
+            const location = result?.legs![0]
+            setPickupLocation({
+              address: location?.start_address,
+              coordinates: { latitude: location?.start_location?.lat, longitude: location?.start_location?.lng },
+            })
+            setDropLocation({
+              address: location?.end_address,
+              coordinates: { latitude: location?.end_location?.lat, longitude: location?.end_location?.lng },
+            })
+            setDistance(result?.distance ?? null);
+            setDuration(result?.duration ?? null);
+          }}
+        />
       </MapView>
-      <BackButton />
-      <View style={styles.spacer} />
-      <View style={styles.bottomContainer}>
-        <View style={styles.pathRow}>
-          <View style={styles.iconColumn}>
-            <View style={styles.greenCircle} />
-            <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.verticalLine} />
-            <View style={styles.redCircle} />
+
+      {/* Distance and Duration Information */}
+      {distance !== null && duration !== null && (
+        <View style={styles.detailsContainer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Icon name="location-outline" size={18} />
+            <Text style={styles.detailsText}>{distance.toFixed(2)} km</Text>
           </View>
-          <View style={styles.textColumn}>
-            <TouchableOpacity onPress={() => openSavedDestinations('pickup')}>
-              <Text style={styles.location} numberOfLines={2} ellipsizeMode="tail">
-                {pickupLocation.address}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => openSavedDestinations('drop')}>
-              <Text style={styles.location} numberOfLines={2} ellipsizeMode="tail">
-                {dropLocation.address}
-              </Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Icon name="timer-outline" size={18} />
+            <Text style={styles.detailsText}>{Math.ceil(duration)} mins</Text>
           </View>
         </View>
-        <View style={styles.optionsRow}>
-          {/* <TouchableOpacity style={styles.optionButton}>
-            <Image source={ImagePath.calender} style={styles.optionIcon} />
-            <Text style={styles.optionText}>Schedule for later</Text>
-            <Ionicons name="chevron-forward" size={20} color="#000" />
-          </TouchableOpacity> */}
-          <TouchableOpacity style={styles.optionButton} onPress={() => setModalVisible(true)}>
-            <Image source={selectedPaymentIcon} style={styles.optionIcon} />
-            <Text style={styles.optionText}>{selectedPayment}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#000" />
+      )}
+
+
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          {
+            transform: [{ translateY: pan }],
+          },
+        ]}
+      >
+        {/* Tap here to toggle */}
+        <TouchableOpacity onPress={toggleBottomSheet} activeOpacity={0.7} style={{ padding: 10 }} >
+          <View style={styles.dragHandle} />
+        </TouchableOpacity>
+
+        <View style={styles.iconColumn}>
+          <View style={styles.greenCircle} />
+          <LinearGradient
+            colors={[THEAMCOLOR.PrimaryGreen, THEAMCOLOR.PrimaryRed]}
+            style={styles.verticalLine}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+          />
+          <View style={styles.redCircle} />
+        </View>
+
+        <View style={styles.textInputs}>
+          <TouchableOpacity
+            style={styles.inputBox}
+            onPress={() => {
+              setLocationType('pickup');
+              setModalVisible(true);
+            }}
+          >
+            <Text numberOfLines={1}>{pickupLocation.address}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.inputBox}
+            onPress={() => {
+              setLocationType('drop');
+              setModalVisible(true);
+            }}
+          >
+            <Text numberOfLines={1}>{dropLocation.address}</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {rideOptions.map((ride, index) => (
+
+        <View style={{ marginVertical: 10, height: 130, flexDirection: 'row' }}>
+          {rideOptions.map((ride: any) => (
             <TouchableOpacity
-              key={index}
-              style={[styles.rideOption, selectedRide === ride.type && styles.selectedRideOption]}
-              onPress={() => setSelectedRide(ride.type)}
+              key={ride.type}
+              onPress={() => {
+                setSelectedRide(ride.type);
+                fetchFare(ride.type);  // <-- call API here
+              }}
+              style={[styles.rideOption, selectedRide === ride.type && styles.rideOptionSelected]}
             >
               <Image source={ride.icon} style={styles.rideIcon} />
-              <View style={styles.rideDetails}>
-                <Text style={styles.rideType}>{ride.type}</Text>
-                <Text style={styles.rideInfo}>{ride.eta} • Drop time {ride.dropTime}</Text>
-              </View>
-              <Text style={styles.ridePrice}>₹{ride.price}</Text>
+              <Text style={styles.rideText}>₹{fareData?.fare}</Text>
+              <Text style={{ fontSize: 13, fontWeight: 'bold' }}>
+                {loadingFare ? 'Loading...' : fareData ? `${fareData.duration_min} min, ${fareData.distance_km} km` : ride.eta}
+              </Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
-        <TouchableOpacity style={styles.bookButton} onPress={handleBookRide}>
-          <Text style={styles.bookButtonText}>Book Ride</Text>
-        </TouchableOpacity>
-      </View>
-      {/* Payment Method Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible && locationType === null}
-        onRequestClose={() => {
-          setModalVisible(false);
-        }}
-      >
+        </View>
+
+        <View style={styles.paymentSection}>
+          <TouchableOpacity
+            style={styles.paymentButton}
+            onPress={() => setSelectedPayment((prev) => (prev === 'cash' ? 'online' : 'cash'))}
+          >
+            <Image source={paymentIcon} style={styles.paymentIcon} />
+            <Text>{selectedPayment.toUpperCase()}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.bookButton} onPress={handleBookRide}>
+            <Text style={styles.bookText}>Book Ride</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
+      <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-            <View style={styles.titleContainer}>
-              <Text style={styles.modalTitle}>Select your payment method</Text>
-            </View>
-            {paymentOptions.map((option) => (
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>
+              {locationType === 'pickup' ? 'Pickup Location' : 'Drop Location'}
+            </Text>
+            {savedDestinations?.map((dest: any) => (
               <TouchableOpacity
-                key={option.id}
-                style={styles.radioOption}
-                onPress={() => {
-                  setSelectedPayment(option.id);
-                  setModalVisible(false);
-                }}
+                key={dest.id}
+                style={styles.modalItem}
+                onPress={() => handleSelectLocation(dest)}
               >
-                <View style={styles.radioContent}>
-                  <Image source={option.icon} style={styles.radioIcon} />
-                  <Text style={styles.radioText}>{option.label}</Text>
-                </View>
-                <View style={styles.radioCircle}>
-                  {selectedPayment === option.id && <View style={styles.radioSelected} />}
-                </View>
+                <Text style={styles.modalLabel}>{dest.label}</Text>
+                <Text>{dest.address}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-        </View>
-      </Modal>
-      {/* Saved Destinations Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible && locationType !== null}
-        onRequestClose={() => {
-          setModalVisible(false);
-          setLocationType(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => {
-                setModalVisible(false);
-                setLocationType(null);
-              }}
-            >
-              <Ionicons name="close" size={24} color="#333" />
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalClose}>Close</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {locationType === 'pickup' ? 'Select Pickup Location' : 'Select Drop-off Location'}
-            </Text>
-            <ScrollView>
-              {savedDestinations.map((destination) => (
-                <TouchableOpacity
-                  key={destination.id}
-                  style={styles.savedDestinationItem}
-                  onPress={() => handleSelectLocation(destination)}
-                >
-                  <View style={styles.locationContent}>
-                    <Image
-                      source={ImagePath.rideHistory}
-                      style={[styles.radioIcon, { tintColor: THEAMCOLOR.SecondaryGray }]}
-                    />
-                    <View style={styles.locationTextContainer}>
-                      <Text style={styles.radioText}>{destination.label}</Text>
-                      <Text style={styles.locationSubText}>{destination.address}</Text>
-                    </View>
-                  </View>
-                  <Icon name="bookmark" size={18} color={THEAMCOLOR.SecondaryGray} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -330,260 +429,128 @@ const RideSelectionScreen = () => {
 export default RideSelectionScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  map: {
-    width: width,
-    height: height * 0.35,
+  container: { flex: 1 },
+  bottomSheet: {
     position: 'absolute',
-    top: 0,
     left: 0,
-    zIndex: -1,
+    right: 0,
+    bottom: 0,
+    height: EXPANDED_HEIGHT,
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    elevation: 10,
   },
-  spacer: {
-    height: height * 0.3,
-    backgroundColor: 'transparent',
-  },
-  bottomContainer: {
-    height: height * 0.6,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom:20
-  },
-  pathRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 15,
-    padding: 15,
-    marginTop: -40,
-    marginHorizontal: 15,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+  dragHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: '#ccc',
+    alignSelf: 'center',
+    borderRadius: 3,
   },
   iconColumn: {
+    position: 'absolute',
+    top: 50,
+    left: 26,
     alignItems: 'center',
-    marginRight: 10,
   },
   greenCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'green',
-  },
-  redCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'red',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: THEAMCOLOR.PrimaryGreen,
   },
   verticalLine: {
     width: 2,
-    height: 30,
-    marginVertical: 2,
+    height: 50,
+    marginVertical: 4,
   },
-  textColumn: {
-    justifyContent: 'space-between',
-    height: 60,
-    flex: 1,
+  redCircle: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: THEAMCOLOR.PrimaryRed,
   },
-  location: {
-    fontSize: 12,
-    color: '#333',
-    marginVertical: 2,
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+  textInputs: {
+    marginLeft: 40,
+    marginBottom: 10,
   },
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: 15,
-    marginBottom: 15,
-  },
-  optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 10,
-    flex: 1,
-  },
-  optionIcon: {
-    width: 20,
-    height: 20,
-    resizeMode: 'contain',
-  },
-  optionText: {
-    fontSize: 11,
-    color: '#000',
-    marginHorizontal: 5,
-    flex: 1,
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
-  },
-  scrollView: {
-    flex: 1,
-    zIndex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
+  inputBox: {
+    borderBottomWidth: 1,
+    borderColor: '#ccc',
+    paddingVertical: 6,
+    marginBottom: 8,
   },
   rideOption: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    padding: 10,
+    marginRight: 10,
+    alignItems: 'center',
+    width: '95%',
+    marginHorizontal: 'auto'
+  },
+  rideOptionSelected: {
+    borderColor: THEAMCOLOR.PrimaryGreen,
+    backgroundColor: '#e0f2f1',
+  },
+  rideIcon: { width: 50, height: 50, resizeMode: 'contain' },
+  rideText: { fontWeight: 'bold', color: THEAMCOLOR.PrimaryGreen },
+  paymentSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderColor: '#ecebebff',
+    paddingTop: 10
+  },
+  paymentButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    padding: 10,
-    marginHorizontal: 5,
-    marginBottom: 10,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
   },
-  selectedRideOption: {
-    borderColor: THEAMCOLOR.PrimaryGreen,
-    marginHorizontal: 15,
-    borderWidth: 2,
-  },
-  rideIcon: {
-    width: 40,
-    height: 40,
-    marginRight: 10,
-  },
-  rideDetails: {
-    flex: 1,
-  },
-  rideType: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#333',
-    fontFamily: THEAMFONTFAMILY.LatoBold,
-  },
-  rideInfo: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-  },
-  ridePrice: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: THEAMCOLOR.PrimaryGreen,
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-  },
+  paymentIcon: { width: 24, height: 24, marginRight: 8 },
   bookButton: {
     backgroundColor: THEAMCOLOR.PrimaryGreen,
-    paddingVertical: 15,
-    marginHorizontal: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 3,
+    paddingHorizontal: 30,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  bookButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
-  },
+  bookText: { color: 'white', fontWeight: 'bold' },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  modalContent: {
-    width: width * 0.9,
-    backgroundColor: '#fff',
-    borderRadius: 16,
+  modalContainer: {
+    backgroundColor: 'white',
     padding: 20,
-    alignItems: 'flex-start',
+    borderTopRightRadius: 16,
+    borderTopLeftRadius: 16,
   },
-  modalTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    alignSelf: 'flex-start',
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
+  modalTitle: { fontWeight: 'bold', fontSize: 18, marginBottom: 15 },
+  modalItem: { marginBottom: 15 },
+  modalLabel: { fontWeight: 'bold' },
+  modalClose: {
+    marginTop: 12,
+    textAlign: 'center',
+    color: THEAMCOLOR.PrimaryGreen,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
-  },
-  radioOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    width: '100%',
-  },
-  radioContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  radioIcon: {
-    width: 20,
-    height: 20,
-    resizeMode: 'contain',
-  },
-  radioText: {
-    fontSize: 12,
-    color: '#333',
-    fontFamily: THEAMFONTFAMILY.LatoBold,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: THEAMCOLOR.PrimaryGreen,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: THEAMCOLOR.PrimaryGreen,
-  },
-  closeButton: {
+  detailsContainer: {
     position: 'absolute',
-    top: 20,
-    right: 15,
-  },
-  savedDestinationItem: {
+    top: 50,
+    left: 10,
+    backgroundColor: '#ffffffee',
+    borderRadius: 20,
+    padding: 10,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: THEAMCOLOR.SecondaryGray,
-    flex: 1,
+    gap: 20,
+    elevation: 4,
   },
-  locationContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 10,
+  detailsText: {
+    marginLeft: 5,
+    fontWeight: '600',
   },
-  locationTextContainer: {
-    // flex: 1,
-    width: '80%',
-  },
-  locationSubText: {
-    fontFamily: THEAMFONTFAMILY.NunitoRegular,
-    fontSize: 12,
-    color: THEAMCOLOR.SecondaryGray,
-    marginTop: 5,
-  },
+
 });

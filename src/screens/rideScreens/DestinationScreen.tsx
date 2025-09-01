@@ -172,6 +172,10 @@ const DestinationScreen = () => {
         </View>
       </View>
 
+      <TouchableOpacity style={[styles.mapButton, { backgroundColor: THEAMCOLOR.PrimaryGreen, marginHorizontal: 'auto', marginTop: 'auto', marginBottom: 20, width: width * 0.9 }]} onPress={() => navigation.navigate('RideSelectionScreen')}>
+        <Text style={{ color: 'white', textAlign: 'center', width: '100%' }}>Continue</Text>
+      </TouchableOpacity>
+
       {/* Saved Destinations Modal */}
       <Modal
         visible={showSavedDestinations}
@@ -220,7 +224,7 @@ const DestinationScreen = () => {
           </View>
         </View>
       </Modal>
-    </View>
+    </View >
   );
 };
 

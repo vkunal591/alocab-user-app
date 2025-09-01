@@ -1,17 +1,29 @@
-import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView, ToastAndroid } from 'react-native';
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
-import LinearGradient from 'react-native-linear-gradient';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Dimensions,
+    Image,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    ScrollView,
+    ToastAndroid,
+    SafeAreaView,
+    TextInput,
+    ActivityIndicator,
+    Animated,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
-import ImagePath from '../../constants/ImagePath';
+import CabMap from '../../Components/common/CabMap';
 import BackButton from '../../Components/common/BackButton';
-import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import apiUtils from '../../utils/apiUtils';
-import { RideDetails } from './BookRideScreen';
+import ImagePath from '../../constants/ImagePath';
 
 const { width, height } = Dimensions.get('screen');
 
@@ -21,182 +33,428 @@ export enum RideStatus {
     ACCEPTED = 'accepted',
     REQUESTED = 'requested',
     COMPLETED = 'completed',
-    CANCELLED = 'cancelled'
+    CANCELLED = 'cancelled',
+}
+
+interface RideDetails {
+    _id: string;
+    pickup: {
+        address: string;
+        coordinates: [number, number];
+    };
+    drops: Array<{
+        address: string;
+        coordinates: [number, number];
+    }>;
+    fare: number;
+    distance: string;
+    duration: number;
+    vehicleType: string;
+    paymentMode: string;
+    status: RideStatus;
+    pin: number;
+    driver: {
+        name: string;
+        rating: number;
+        phoneNumber: string;
+        vehicle: {
+            type: string;
+            model: string;
+            number: string;
+        };
+        location: {
+            coordinates: [number, number];
+        };
+    };
+    eta?: string;
 }
 
 const InRideScreen = () => {
-    const [modalVisible, setModalVisible] = useState(false);
     const navigation = useNavigation<any>();
     const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
-    const [request] = useState({
-        name: 'Nikhil',
-        eta: '3 Min',
-        distance: 'Hero Splendor • DL 12 AA 2233',
-        amount: 2480,
-        pickup: '223, A Pocket, Dwarka, New Delhi',
-        drop: 'E 99, Kamla Nagar, Delhi',
-        totalDistance: '7.3 Km',
-        userImage: 'https://i.pravatar.cc/150?img=8',
-    });
+    const [reviewModalVisible, setReviewModalVisible] = useState(false);
+    const [helpModalVisible, setHelpModalVisible] = useState(false);
+    const [rating, setRating] = useState(0);
+    const [reviewText, setReviewText] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const slideAnim = useRef(new Animated.Value(height * 0.31)).current; // Start with card partially visible
+    const fadeAnim = useRef(new Animated.Value(0)).current; // For content fade-in
+    const [isCardOpen, setIsCardOpen] = useState(false);
 
-    const handleOptionPress = (option) => {
-        console.log(`Selected option: ${option}`);
-        setModalVisible(false);
+    // Sample ride data from provided JSON
+    const sampleRideData: RideDetails = {
+        _id: '68b57480d64e9e9c9eefde78',
+        pickup: {
+            address: 'I -5, opp. metro pillar 331, Kailash Park, Basai Dara pur, Kirti Nagar, Delhi, 110015, India',
+            coordinates: [28.654971, 77.13715859999999],
+        },
+        drops: [
+            {
+                address: '9926.AHATA THAKUR DASS. SARAI ROHILLA NEW ROHTAK ROAD NEW DELHI, Railway Officers Colony, Karol Bagh, Delhi, 110005, India',
+                coordinates: [28.6625333, 77.1852154],
+            },
+        ],
+        fare: 87.19,
+        distance: '5.7',
+        duration: 18.1,
+        vehicleType: 'auto',
+        paymentMode: 'cash',
+        status: RideStatus.ACCEPTED, // Toggle to COMPLETED for review testing
+        pin: 991085,
+        driver: {
+            name: 'Kunal Verma',
+            rating: 0,
+            phoneNumber: '+916299477707',
+            vehicle: {
+                type: 'auto',
+                model: 'Toyota',
+                number: 'Dl28a2839',
+            },
+            location: {
+                coordinates: [28.6546705, 77.1361942],
+            },
+        },
+        eta: '18 mins',
     };
 
+    // Toggle slide animation for bottom card
+    const toggleSlide = () => {
+        Animated.parallel([
+            Animated.spring(slideAnim, {
+                toValue: isCardOpen ? height * 0.31 : height * 0.15,
+                tension: 80,
+                friction: 12,
+                useNativeDriver: true,
+            }),
+            Animated.timing(fadeAnim, {
+                toValue: isCardOpen ? 0 : 1,
+                duration: 200,
+                useNativeDriver: true,
+            }),
+        ]).start(() => setIsCardOpen(!isCardOpen));
+    };
 
-    const fetchRideDetails = async () => {
+    // Fetch ride details
+    const fetchRideDetails = async (setRideDetailsCallback?: (ride: RideDetails) => void) => {
         try {
-            const response: any = await apiUtils.get('/api/ride/detail');
-            if (response?.success) {
-                setRideDetails(response.ride);
-                console.log('Ride details fetched:', response.ride);
-                return response?.ride?.status;
+            const res: any = await apiUtils.get('/api/ride/active/ride');
+            const response = res?.data
+            console.log(response)
+            if (res?.success) {
+                const updatedRide = {
+                    ...response,
+                    eta: `${Math.ceil(response?.duration)} mins`,
+                };
+                setRideDetailsCallback?.(updatedRide);
+                setRideDetails(updatedRide);
+                setIsLoading(false);
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true,
+                }).start();
+                return response.status;
             } else {
                 ToastAndroid.show(response?.message || 'Failed to fetch ride details', ToastAndroid.SHORT);
+                setIsLoading(false);
                 return null;
             }
         } catch (error: any) {
             ToastAndroid.show(error.message || 'Error fetching ride details', ToastAndroid.LONG);
+            setIsLoading(false);
             return null;
         }
     };
 
     useEffect(() => {
-        const getRideDetails = async () => {
-            await fetchRideDetails();
-        };
-        getRideDetails();
+        // Simulate fetching data with sample data
+        setTimeout(() => {
+            setRideDetails(sampleRideData);
+            setIsLoading(false);
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        }, 1000);
+        // Uncomment to use actual API call
+        // fetchRideDetails();
     }, []);
 
+    // Handle action buttons
+    const makeCall = () => {
+        ToastAndroid.show(`Calling ${rideDetails?.driver.name}...`, ToastAndroid.SHORT);
+        // Implement actual call: Linking.openURL(`tel:${rideDetails?.driver.phoneNumber}`);
+    };
+
+    const handleShareRide = () => {
+        ToastAndroid.show('Sharing ride details...', ToastAndroid.SHORT);
+        // Implement sharing logic
+    };
+
+    const handleHelpOption = (option: string) => {
+        ToastAndroid.show(`Selected: ${option}`, ToastAndroid.SHORT);
+        setHelpModalVisible(false);
+    };
+
+    const handleCancelRide = () => {
+        ToastAndroid.show('Ride cancelled', ToastAndroid.SHORT);
+        navigation.goBack();
+    };
+
+    const handleSubmitReview = () => {
+        if (rating === 0) {
+            ToastAndroid.show('Please select a rating', ToastAndroid.SHORT);
+            return;
+        }
+        ToastAndroid.show('Review submitted!', ToastAndroid.SHORT);
+        setReviewModalVisible(false);
+        setRating(0);
+        setReviewText('');
+        // Implement API call to submit review
+    };
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color={THEAMCOLOR.PrimaryGreen} />
+                    <Text style={styles.loaderText}>Loading ride details...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // Error state
+    if (!rideDetails) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loaderContainer}>
+                    <Text style={styles.errorText}>Failed to load ride details.</Text>
+                    <TouchableOpacity
+                        style={styles.retryButton}
+                        onPress={() => navigation.goBack()}
+                        accessibilityLabel="Go back"
+                    >
+                        <Text style={styles.retryButtonText}>Go Back</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
             <BackButton />
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                <MapView
-                    style={styles.map}
-                    region={{
-                        latitude: 28.6139,
-                        longitude: 77.2090,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01,
-                    }}
-                    scrollEnabled={true}
-                    zoomEnabled={true}
-                    pitchEnabled={true}
-                    rotateEnabled={true}
+            <CabMap
+                style={styles.map}
+                pickupCoords={{
+                    latitude: rideDetails.pickup.coordinates[0],
+                    longitude: rideDetails.pickup.coordinates[1],
+                }}
+                dropCoords={{
+                    latitude: rideDetails.drops[0].coordinates[0],
+                    longitude: rideDetails.drops[0].coordinates[1],
+                }}
+                driverCoords={{
+                    latitude: rideDetails.driver.location.coordinates[0],
+                    longitude: rideDetails.driver.location.coordinates[1],
+                }}
+            />
+
+            <Animated.View style={[styles.bottomCard, { transform: [{ translateY: slideAnim }] }]}>
+                <LinearGradient
+                    colors={[THEAMCOLOR.PureWhite, THEAMCOLOR.SecondarySmokeWhite]}
+                    style={styles.gradient}
                 >
-                    <Marker coordinate={{ latitude: 28.6139, longitude: 77.2090 }} title="Your Location" />
-                </MapView>
-                <View style={styles.card}>
-                    <View style={styles.profileRow}>
-                        <Image source={{ uri: request.userImage }} style={styles.avatar} />
-                        <View style={styles.info}>
-                            <View style={styles.starContainer}>
-                                <Text style={styles.name}>{request.name}</Text>
-                                {[...Array(rideDetails?.driver?.rating || 0)].map((_, index) => (
-                                    <Icon key={index} name="star" size={16} color="#FFB700" />
-                                ))}
-                            </View>
-                            <Text style={styles.detail}>{rideDetails?.driver?.vehicle?.model + ' • ' + rideDetails?.driver?.vehicle?.number}</Text>
-                        </View>
-                        <View style={styles.actions}>
-                            <TouchableOpacity
-                                style={styles.callBtn}
-                                onPress={() => setModalVisible(true)}
-                            >
-                                <Image source={ImagePath.alert} style={styles.inputIcon} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.msgBtn}>
-                                <Image source={ImagePath.share} style={styles.inputIcon} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                    <View style={styles.detailsRow}>
-                        <View style={styles.info}>
-                            <Text style={styles.name2}>Trip in progress</Text>
-                            <Text style={styles.detail2}>You will reach your destination in<Text style={{ color: THEAMCOLOR?.PrimaryGreen, }}>{' 32 min'}</Text></Text>
-                        </View>
-                    </View>
-                    <View style={styles.detailsRow3}>
-                        <View style={styles.info}>
-                            <Text style={styles.name2}>Payment Mode</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, }}>
-                                <Image source={ImagePath.money} style={{ width: 15, height: 15, resizeMode: 'contain' }} />
-                                <Text style={styles.detail2}>{rideDetails?.paymentMode?.charAt(0)?.toUpperCase() + rideDetails?.paymentMode?.slice(1)}</Text>
-                            </View>
-                        </View>
-                        {/* <TouchableOpacity onPress={() => navigation.navigate("PaymentScreen")} style={{ backgroundColor: THEAMCOLOR.PrimaryGreen, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 10, color: '#fff', }}>
-                            <Text style={{ fontSize: 12, color: '#fff' }}>Pay Now</Text>
-                        </TouchableOpacity> */}
-                    </View>
-                    <View style={styles.detailsRow3}>
-                        <View style={styles.info}>
-                            <Text style={styles.name2}>Ride Details </Text>
-                        </View>
-                        <View style={styles.moneyBox}>
-                            <Image source={ImagePath?.location2} style={styles.money} />
-                            <Text style={styles.detail2}>{rideDetails?.distance} Km</Text>
-                        </View>
-                    </View>
-                    <View style={styles.pathRow}>
-                        <View style={styles.iconColumn}>
-                            <View style={styles.greenCircle} />
-                            <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.verticalLine} />
-                            <View style={styles.redCircle} />
-                        </View>
-                        <View style={styles.textColumn}>
-                            <Text style={styles.location}>{rideDetails?.pickup?.address}</Text>
-                            <View style={styles.border}></View>
-                            <Text style={styles.location2}>{rideDetails?.drops[0]?.address}</Text>
-                        </View>
-                    </View>
-                    {/* <View style={styles.withdrawSection}>
-                        <Text style={styles.name2}>Tip the driver</Text>
-                        <View style={styles.amountButtons}>
-                            {[100, 200, 500, 'Tip In Cash'].map((amount) => (
-                                <TouchableOpacity key={amount} style={styles.amountButton}>
-                                    <Text style={styles.amountButtonText}>₹{amount}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View> */}
+                    {/* Notch for sliding */}
                     <TouchableOpacity
-                        style={styles.confirmButton}
-                        onPress={async () => {
-                            const status = fetchRideDetails();
-                            RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen',{rideId:rideDetails?._id}): ToastAndroid.show('Ride is not completed, Please wait for the driver to complete the ride', ToastAndroid.SHORT);
-                        }}>
-                        <Text style={styles.confirmButtonText}>Add Review</Text>
+                        style={styles.notch}
+                        onPress={toggleSlide}
+                        accessibilityLabel={isCardOpen ? 'Collapse card' : 'Expand card'}
+                    >
+                        <View style={styles.notchBar} />
                     </TouchableOpacity>
-                </View>
-            </ScrollView>
-            <Modal
+
+                    {/* Card Content */}
+                    <Animated.View style={[styles.cardContent]}>
+                        {/* Collapsed State Content */}
+                        <View style={styles.collapsedContent}>
+                            <View style={styles.driverInfo}>
+                                <Image
+                                    source={ImagePath.Profile} // Replace with actual driver image
+                                    style={styles.driverAvatar}
+                                    accessibilityLabel="Driver avatar"
+                                />
+                                <View style={styles.driverDetails}>
+                                    <Text style={styles.driverName}>{rideDetails.driver.name}</Text>
+                                    <Text style={styles.driverRating}>
+                                        {rideDetails.driver.rating > 0 ? `★ ${rideDetails.driver.rating.toFixed(1)}` : 'New Driver'}
+                                    </Text>
+                                    <Text numberOfLines={1} style={styles.vehicleText}>
+                                        {rideDetails.driver.vehicle.model} • {rideDetails.driver.vehicle.number}
+                                    </Text>
+                                </View>
+                                <View style={styles.actions}>
+                                    <TouchableOpacity
+                                        style={styles.shareBtn}
+                                        onPress={handleShareRide}
+                                        accessibilityLabel="Share ride"
+                                    >
+                                        <Ionicons size={20} name="share-outline" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.alertBtn}
+                                        onPress={() => setHelpModalVisible(true)}
+                                        accessibilityLabel="Need help"
+                                    >
+                                        <MaterialCommunityIcons size={20} name="alert-rhombus" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+
+
+                        {/* Trip Status */}
+                        <Text style={styles.etaText}>
+                            Trip in progress • {rideDetails.eta} to destination • {rideDetails.distance} km
+                        </Text>
+
+                        {/* Trip Details */}
+                        {/* <View style={styles.tripDetails}>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="location-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Pickup</Text>
+                                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.detailText}>
+                                        {rideDetails.pickup.address}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="flag-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Drop-off</Text>
+                                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.detailText}>
+                                        {rideDetails.drops[0].address}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="cash-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Fare ({rideDetails.paymentMode})</Text>
+                                    <Text style={styles.detailText}>₹{rideDetails.fare.toFixed(2)}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="time-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Distance & Duration</Text>
+                                    <Text style={styles.detailText}>
+                                        {rideDetails.distance} km • {rideDetails.eta}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View> */}
+
+                        {/* Action Buttons */}
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity
+                                style={styles.actionBtn}
+                                onPress={async () => {
+                                    const status = fetchRideDetails(setRideDetails);
+                                    RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen', { ride: rideDetails }) : ToastAndroid.show('Ride is not completed, Please wait for the driver to accept the ride', ToastAndroid.SHORT);
+
+                                }}
+                                activeOpacity={0.8}
+                                accessibilityLabel="Add review"
+                            >
+                                <Text style={styles.actionBtnText}>Finish Ride</Text>
+                            </TouchableOpacity>
+
+                        </View>
+
+                    </Animated.View>
+                </LinearGradient>
+            </Animated.View >
+
+            {/* Review Modal */}
+            < Modal
                 animationType="slide"
                 transparent={true}
-                visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
+                visible={reviewModalVisible}
+                onRequestClose={() => setReviewModalVisible(false)}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity
                             style={styles.closeButton}
-                            onPress={() => setModalVisible(false)}
+                            onPress={() => setReviewModalVisible(false)}
+                            accessibilityLabel="Close review modal"
+                        >
+                            <Ionicons name="close" size={24} color="#333" />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Rate Your Ride</Text>
+                        <View style={styles.ratingContainer}>
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <TouchableOpacity
+                                    key={star}
+                                    onPress={() => setRating(star)}
+                                    accessibilityLabel={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                                >
+                                    <MaterialIcons
+                                        name={star <= rating ? 'star' : 'star-border'}
+                                        size={32}
+                                        color={star <= rating ? '#FFB700' : '#ccc'}
+                                    />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <TextInput
+                            style={styles.reviewInput}
+                            placeholder="Share your feedback (optional)"
+                            value={reviewText}
+                            onChangeText={setReviewText}
+                            multiline
+                            maxLength={200}
+                            accessibilityLabel="Review feedback input"
+                        />
+                        <TouchableOpacity
+                            style={styles.submitReviewButton}
+                            onPress={handleSubmitReview}
+                            accessibilityLabel="Submit review"
+                        >
+                            <Text style={styles.submitReviewButtonText}>Submit Review</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </ Modal>
+
+            {/* Help Modal */}
+            < Modal
+                animationType="slide"
+                transparent={true}
+                visible={helpModalVisible}
+                onRequestClose={() => setHelpModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity
+                            style={styles.closeButton}
+                            onPress={() => setHelpModalVisible(false)}
+                            accessibilityLabel="Close help modal"
                         >
                             <Ionicons name="close" size={24} color="#333" />
                         </TouchableOpacity>
                         <View style={styles.titleContainer}>
-                            <MaterialCommunityIcons name="alert-rhombus" size={29} color="#333" style={{ color: 'red' }} />
+                            <MaterialCommunityIcons name="alert-rhombus" size={24} color="red" />
                             <Text style={styles.modalTitle}>Need Help?</Text>
                         </View>
                         <TouchableOpacity
                             style={styles.modalOption}
-                            onPress={() => handleOptionPress('Call our support for help')}
+                            onPress={() => handleHelpOption('Call our support for help')}
                         >
                             <View style={styles.optionContainer}>
                                 <MaterialCommunityIcons name="phone-outline" size={16} color="#333" style={styles.optionIcon} />
@@ -205,7 +463,7 @@ const InRideScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.modalOption}
-                            onPress={() => handleOptionPress('Call your emergency contact')}
+                            onPress={() => handleHelpOption('Call your emergency contact')}
                         >
                             <View style={styles.optionContainer}>
                                 <MaterialCommunityIcons name="contacts" size={16} color="#333" style={styles.optionIcon} />
@@ -214,7 +472,7 @@ const InRideScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.modalOption}
-                            onPress={() => handleOptionPress('Call Police for help')}
+                            onPress={() => handleHelpOption('Call Police for help')}
                         >
                             <View style={styles.optionContainer}>
                                 <MaterialCommunityIcons name="police-badge" size={16} color="#333" style={styles.optionIcon} />
@@ -223,7 +481,7 @@ const InRideScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.modalOption}
-                            onPress={() => handleOptionPress('Report crash')}
+                            onPress={() => handleHelpOption('Report crash')}
                         >
                             <View style={styles.optionContainer}>
                                 <MaterialCommunityIcons name="car-brake-alert" size={16} color="#333" style={styles.optionIcon} />
@@ -232,197 +490,106 @@ const InRideScreen = () => {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </Modal>
-        </SafeAreaView>
+            </ Modal>
+        </SafeAreaView >
     );
 };
 
 export default InRideScreen;
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: THEAMCOLOR?.SecondarySmokeWhite,
+        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
     },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        flexGrow: 1,
+    backButton: {
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        zIndex: 10,
     },
     map: {
         width,
         height: height * 0.4,
-        alignSelf: 'center',
-        overflow: 'hidden',
     },
-    card: {
+    bottomCard: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        width,
+        height: height * 0.45,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
-        borderWidth: 1,
-        borderColor: '#fafafa',
-        overflow: 'hidden',
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
+    gradient: {
+        flex: 1,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
         paddingBottom: 20,
     },
-    profileRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    notch: {
+        width: '100%',
         alignItems: 'center',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: 'lightgray',
-        paddingBottom: 18,
-        marginBottom: 10,
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+        paddingVertical: 12,
     },
-    detailsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-        paddingBottom: 5,
-        marginBottom: 10,
+    notchBar: {
+        width: 50,
+        height: 5,
+        backgroundColor: '#ccc',
+        borderRadius: 2.5,
     },
-    detailsRow3: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-    },
-    pathRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#f0f2f5',
-        borderRadius: 15,
-        backgroundColor: '#fff',
-        shadowColor: 'gray',
-        shadowOffset: { width: 1, height: 1 },
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
-        elevation: 5,
-        marginHorizontal: 15,
-        padding: 15,
-        marginTop: 5,
-        marginBottom: 25,
-    },
-    iconColumn: {
-        alignItems: 'center',
-        marginRight: 10,
-    },
-    greenCircle: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: 'green',
-    },
-    redCircle: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: 'red',
-    },
-    verticalLine: {
-        width: 2,
-        height: 30,
-        marginVertical: 2,
-    },
-    textColumn: {
-        justifyContent: 'space-between',
-        height: 60,
-        width: width * 0.75,
-    },
-    avatar: {
-        width: 45,
-        height: 45,
-        borderRadius: 22,
-        marginRight: 10,
-    },
-    info: {
+    cardContent: {
+        paddingHorizontal: 20,
         flex: 1,
     },
-    starContainer: {
+    collapsedContent: {
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingBottom: 0
+    },
+    driverInfo: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginBottom: 15,
     },
-    name: {
-        fontWeight: '600',
-        fontSize: 13,
-        marginRight: 10,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Subtitle
+    driverAvatar: {
+        width: 50,
+        height: 50,
+        borderRadius: 30,
+        marginRight: 15,
+        backgroundColor: '#fff',
     },
-    name2: {
-        fontWeight: 'semibold',
+    driverDetails: {
+        flex: 1,
+    },
+    driverName: {
         fontSize: 14,
-        marginBottom: 5,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Subtitle
+        fontWeight: '600',
+        color: '#000',
+        fontFamily: THEAMFONTFAMILY.NunitoBold || 'Nunito-Bold',
     },
-    detail: {
+    driverRating: {
+        fontSize: 11,
         color: '#666',
-        fontSize: 11,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    detail2: {
-        color: '#666',
-        fontSize: 12,
-        marginBottom: 5,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    amount: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: '#4CAF50',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    cash: {
-        textAlign: 'right',
-        color: 'gray',
-        fontSize: 11,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    moneyBox: {
-        flexDirection: 'row',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
-    },
-    money: {
-        width: 20,
-        height: 18,
-        marginRight: 5,
-        resizeMode: 'contain',
-    },
-    location: {
-        fontSize: 11,
-        color: '#333',
-        marginVertical: 3,
-        marginBottom: 10,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    border: {
-        width: '100%',
-        borderStyle: 'dashed',
-        borderColor: 'lightgray',
-        borderBottomWidth: 1,
-    },
-    location2: {
-        fontSize: 11,
-        color: '#333',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
         marginVertical: 2,
-        marginTop: 10,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
     },
-    distanceText: {
+    vehicleText: {
         fontSize: 11,
-        color: '#999',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
+        color: '#666',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
     },
     actions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        width: width * 0.25,
-        marginTop: 10,
+        gap: 10
+        // width: width * 0.35,
     },
     callBtn: {
         backgroundColor: THEAMCOLOR?.SecondaryWhite,
@@ -432,7 +599,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: 40,
         height: 40,
-        borderRadius: 22,
+        borderRadius: 20,
     },
     msgBtn: {
         backgroundColor: THEAMCOLOR?.SecondaryWhite,
@@ -442,69 +609,114 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: 40,
         height: 40,
-        borderRadius: 22,
-    },
-    inputIcon: {
-        width: 20,
-        height: 20,
-        padding: 5,
-        marginHorizontal: 10,
-        resizeMode: 'contain',
-    },
-    withdrawSection: {
-        marginHorizontal: 15,
-        marginBottom: height * 0.02,
-    },
-    amountButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-start',
-        gap: 15,
-        marginVertical: height * 0.01,
-    },
-    amountButton: {
-        borderWidth: 1,
-        borderColor: 'gray',
-        paddingVertical: 3,
-        paddingHorizontal: 15,
         borderRadius: 20,
     },
-    amountButtonText: {
-        fontSize: 10,
+    shareBtn: {
+        backgroundColor: THEAMCOLOR?.SecondaryWhite,
+        borderWidth: 1,
+        borderColor: 'gray',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+    },
+    alertBtn: {
+        backgroundColor: THEAMCOLOR?.SecondaryWhite,
+        borderWidth: 1,
+        borderColor: 'gray',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+    },
+    etaText: {
+        fontSize: 14,
         fontWeight: '500',
         color: THEAMCOLOR.PrimaryGreen,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    confirmButton: {
-        backgroundColor: THEAMCOLOR?.PrimaryGreen,
-        paddingVertical: 12,
-        borderRadius: 15,
-        marginHorizontal: 15,
+        textAlign: 'center',
         marginBottom: 10,
-        justifyContent: 'center',
+        fontFamily: THEAMFONTFAMILY.NunitoMedium || 'Nunito-Medium',
+    },
+    tripDetails: {
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+        paddingTop: 15,
+    },
+    detailRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 15,
+    },
+    detailTextContainer: {
+        flex: 1,
+        marginLeft: 10,
+    },
+    detailLabel: {
+        fontSize: 13,
+        color: '#999',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
+    },
+    detailText: {
+        fontSize: 14,
+        color: '#333',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
+        marginTop: 2,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
+    },
+    actionBtn: {
+        flex: 1,
+        flexDirection: 'row',
         alignItems: 'center',
-    },
-    confirmButtonText: {
-        color: '#fff',
-        fontSize: width * 0.035,
-        fontWeight: 'bold',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
-    },
-    cancelButton: {
-        backgroundColor: THEAMCOLOR?.SecondaryWhite,
+        justifyContent: 'center',
+        backgroundColor: THEAMCOLOR.PrimaryGreen,
         paddingVertical: 12,
-        borderRadius: 15,
-        marginHorizontal: 15,
-        marginBottom: 20,
+        borderRadius: 12,
+        marginHorizontal: 5,
+    },
+    actionBtnText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
+        marginLeft: 5,
+        fontFamily: THEAMFONTFAMILY.NunitoBold || 'Nunito-Bold',
+    },
+    cancelBtn: {
+        backgroundColor: '#d32f2f',
+    },
+    loaderContainer: {
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        borderColor: 'lightgray',
-        borderWidth: 1,
     },
-    cancelButtonText: {
-        color: THEAMCOLOR?.PrimaryGreen,
-        fontSize: width * 0.035,
+    loaderText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#d32f2f',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
+        marginBottom: 20,
+    },
+    retryButton: {
+        backgroundColor: THEAMCOLOR.PrimaryGreen,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+    },
+    retryButtonText: {
+        color: '#fff',
         fontWeight: 'bold',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
+        fontSize: 16,
+        fontFamily: THEAMFONTFAMILY.NunitoBold || 'Nunito-Bold',
     },
     modalOverlay: {
         flex: 1,
@@ -520,10 +732,11 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     modalTitle: {
-        fontSize: 14,
+        fontSize: 18,
         fontWeight: 'bold',
-        alignSelf: 'flex-start',
-        fontFamily: THEAMFONTFAMILY.LatoRegular, // Title
+        color: '#333',
+        fontFamily: THEAMFONTFAMILY.NunitoBold || 'Nunito-Bold',
+        marginBottom: 10,
     },
     titleContainer: {
         flexDirection: 'row',
@@ -532,7 +745,7 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     modalOption: {
-        paddingVertical: 10,
+        paddingVertical: 12,
         width: '100%',
     },
     optionContainer: {
@@ -549,13 +762,42 @@ const styles = StyleSheet.create({
         padding: 6,
     },
     modalOptionText: {
-        fontSize: 11,
+        fontSize: 14,
         color: '#333',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold, // Description
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
     },
     closeButton: {
         position: 'absolute',
-        top: 20,
+        top: 15,
         right: 15,
+    },
+    ratingContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginVertical: 15,
+    },
+    reviewInput: {
+        borderWidth: 1,
+        borderColor: '#ccc',
+        borderRadius: 8,
+        padding: 10,
+        width: '100%',
+        height: 100,
+        textAlignVertical: 'top',
+        fontFamily: THEAMFONTFAMILY.NunitoRegular || 'Nunito-Regular',
+        marginBottom: 15,
+    },
+    submitReviewButton: {
+        backgroundColor: THEAMCOLOR.PrimaryGreen,
+        paddingVertical: 12,
+        borderRadius: 12,
+        alignItems: 'center',
+        width: '100%',
+    },
+    submitReviewButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
+        fontFamily: THEAMFONTFAMILY.NunitoBold || 'Nunito-Bold',
     },
 });

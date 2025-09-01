@@ -21,11 +21,13 @@ import { useForm, Controller } from 'react-hook-form';
 import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
+import { useAuth } from '../../context/authcontext';
 
 const { width, height } = Dimensions.get('window');
 
 type RootStackParamList = {
-    LoginScreen: undefined;
+
+    Screen: undefined;
     EditProfileScreen: undefined;
     WalletScreen: undefined;
     SupportScreen: undefined;
@@ -42,6 +44,7 @@ type FormData = {
 };
 
 const AccountScreen = () => {
+    const { user }: any = useAuth()
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const [modalVisible, setModalVisible] = useState(false);
     const [actionType, setActionType] = useState<'logout' | 'deactivate' | ''>('');
@@ -63,9 +66,9 @@ const AccountScreen = () => {
 
     const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
         defaultValues: {
-            name: '',
-            email: '',
-            phone: '',
+            name: user?.name || '',
+            email: user.email || '',
+            phone: user?.phoneNumber || '',
             gender: '',
             city: '',
             dateOfBirth: '',
@@ -93,7 +96,7 @@ const AccountScreen = () => {
             navigation.navigate('LoginScreen');
         } else if (actionType === 'deactivate') {
             ToastAndroid.show('Your account has been deactivated.', ToastAndroid.LONG);
-            navigation.navigate('LoginScreen');
+            navigation.navigate('RegisterScreen');
         }
         setModalVisible(false);
     };
@@ -122,17 +125,37 @@ const AccountScreen = () => {
                 <BackButton />
                 <Text style={styles.headerTitle}>Profile</Text>
             </View>
-
             <View style={styles.profileHeader}>
                 <View style={styles.imageContainer}>
                     <Image source={{ uri: profileImage }} style={styles.profileImage} />
-                    <TouchableOpacity style={styles.editImageButton} onPress={handleImagePick}>
-                        <Icon name="edit" size={20} color="#fff" />
-                    </TouchableOpacity>
+                    {/* Uncomment below if you want edit button on image */}
+                    {/* 
+        <TouchableOpacity style={styles.editImageButton} onPress={handleImagePick}>
+          <Icon name="pencil" size={20} color="#fff" />
+        </TouchableOpacity> 
+        */}
                 </View>
-                <Text style={styles.phoneText}>+91 912834311</Text>
-            </View>
 
+                <Text style={styles.nameText}>
+                    {user?.name || 'NA'}
+                </Text>
+
+                <View style={styles.infoRow}>
+                    <View style={styles.infoicon}>
+                        <Icon name="email" size={18} color="#555" />
+                        <Text style={styles.infoText}>
+                            {user?.email || 'NA'}
+                        </Text>
+                    </View>
+                    <View style={styles.infoicon}>
+                        <Icon name="phone" size={18} color="#555" />
+                        <Text style={styles.infoText}>
+                            +91 {user?.phoneNumber || 'NA'}
+                        </Text>
+                    </View>
+                </View>
+            </View>
+            {/* 
             <View style={styles.form}>
                 <Controller
                     control={control}
@@ -144,6 +167,7 @@ const AccountScreen = () => {
                             <TextInput
                                 style={styles.input}
                                 placeholder="Enter your name"
+                                placeholderTextColor={"gray"}
                                 value={value}
                                 onBlur={onBlur}
                                 onChangeText={onChange}
@@ -173,6 +197,7 @@ const AccountScreen = () => {
                             <TextInput
                                 style={styles.input}
                                 placeholder="Enter your email"
+                                placeholderTextColor={"gray"}
                                 value={value}
                                 onBlur={onBlur}
                                 onChangeText={onChange}
@@ -196,6 +221,7 @@ const AccountScreen = () => {
                             <TextInput
                                 style={styles.input}
                                 placeholder="Enter your phone number"
+                                placeholderTextColor={"gray"}
                                 value={value}
                                 onBlur={onBlur}
                                 onChangeText={onChange}
@@ -209,7 +235,6 @@ const AccountScreen = () => {
                     name="phone"
                 />
                 {errors.phone && <Text style={styles.errorText}>{errors.phone.message}</Text>}
-
                 <Controller
                     control={control}
                     rules={{ required: 'Gender is required' }}
@@ -301,7 +326,7 @@ const AccountScreen = () => {
                     )}
                     name="emergencyContact"
                 />
-                {errors.emergencyContact && <Text style={styles.errorText}>{errors.emergencyContact.message}</Text>}
+                {errors.emergencyContact && <Text style={styles.errorText}>{errors.emergencyContact.message}</Text>} 
 
                 <TouchableOpacity
                     style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -315,6 +340,7 @@ const AccountScreen = () => {
                     )}
                 </TouchableOpacity>
             </View>
+                        */}
 
             <TouchableOpacity
                 style={styles.logoutButton}
@@ -454,6 +480,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         maxWidth: width * 0.7,
         fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+        color: "#000"
     },
     inputIcon: {
         width: 20,
@@ -503,7 +530,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: height * 0.01,
+        marginTop: 16,
         marginHorizontal: width * 0.05,
         padding: height * 0.015,
         backgroundColor: 'transparent',
@@ -592,5 +619,29 @@ const styles = StyleSheet.create({
         lineHeight: LINE_HEIGHT.small,
         fontWeight: '500',
         color: THEAMCOLOR.SecondaryBlack || '#333',
+    },
+    nameText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginVertical: 5,
+        color: THEAMCOLOR.PrimaryGreen,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: width * 0.9,
+        marginTop: 10,
+    },
+    infoicon: {
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        // marginTop: 10,
+    },
+    infoText: {
+        fontSize: 16,
+        color: '#555',
+        alignItems: 'center'
     },
 });

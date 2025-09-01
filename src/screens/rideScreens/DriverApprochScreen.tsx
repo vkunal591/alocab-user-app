@@ -1,491 +1,484 @@
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View, ScrollView, ToastAndroid, Modal } from 'react-native';
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
-import LinearGradient from 'react-native-linear-gradient';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    Dimensions,
+    Image,
+    Animated,
+    ToastAndroid,
+    SafeAreaView,
+    ActivityIndicator,
+    Alert,
+    Linking,
+} from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons'
+import LinearGradient from 'react-native-linear-gradient';
+import CabMap from '../../Components/common/CabMap';
+import BackButton from '../../Components/common/BackButton';
 import { THEAMCOLOR, THEAMFONTFAMILY } from '../../../assets/theam/theam';
 import ImagePath from '../../constants/ImagePath';
-import BackButton from '../../Components/common/BackButton';
-import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import apiUtils from '../../utils/apiUtils';
-import { RideDetails } from './BookRideScreen';
+import { fetchRideDetails, RideStatus } from './BookRideScreen';
 
 const { width, height } = Dimensions.get('screen');
-export enum RideStatus {
-    ONGOING = 'ongoing',
-    REJECTED = 'rejected',
-    ACCEPTED = 'accepted',
-    REQUESTED = 'requested',
-    COMPLETED = 'completed',
-    CANCELLED = 'cancelled'
+
+interface RideDetails {
+    _id: string;
+    pickup: {
+        address: string;
+        coordinates: [number, number];
+    };
+    drops: Array<{
+        address: string;
+        coordinates: [number, number];
+    }>;
+    fare: number;
+    distance: string;
+    duration: number;
+    vehicleType: string;
+    paymentMode: string;
+    driver: {
+        name: string;
+        rating: number;
+        phoneNumber: string;
+        vehicle: {
+            type: string;
+            model: string;
+            number: string;
+        };
+        location: {
+            coordinates: [number, number];
+        };
+    };
+    eta?: string;
 }
 
-const DriverApprochScreen = () => {
+const DriverApproachScreen = () => {
     const navigation = useNavigation<any>();
-    const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
-    const [request] = useState({
-        name: 'Nikhil',
-        eta: '3 Min',
-        distance: 'Hero Splendor • DL 12 AA 2233',
-        amount: 2480,
-        pickup: '223, A Pocket, Dwarka, New Delhi',
-        drop: 'E 99, Kamla Nagar, Delhi',
-        totalDistance: '7.3 Km',
-        userImage: 'https://i.pravatar.cc/150?img=8',
-    });
+    const route = useRoute<any>();
+    const ride: RideDetails = route.params?.ride;
+    const [rideDetails, setRideDetails] = useState<RideDetails | null>(ride ?? null);
+    const [isLoading, setIsLoading] = useState(!ride);
+    const slideAnim = useRef(new Animated.Value(height * 0.65)).current; // Start with card partially visible
+    const fadeAnim = useRef(new Animated.Value(0)).current; // For content fade-in
+    const [isCardOpen, setIsCardOpen] = useState(false);
 
-    const [selectedReason, setSelectedReason] = useState<string>('');
-    const [isReasonModalVisible, setIsReasonModalVisible] = useState(false);
-    const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
-
-    const cancelReasons = [
-        { id: '1', label: 'Driver not available' },
-        { id: '2', label: 'Driver is late' },
-        { id: '3', label: 'Plans changed unexpectedly' },
-        { id: '4', label: 'Other' },
-    ];
-
-    // const isRideCancellable = rideDetails?.status === RideStatus.REQUESTED || rideDetails?.status === RideStatus.ACCEPTED;
-
-    const handleCancelInitiate = async () => {
-        const status = await fetchRideDetails();
-        if (status !== RideStatus.REQUESTED && status !== RideStatus.ACCEPTED) {
-            ToastAndroid.show('Ride cannot be cancelled at this time', ToastAndroid.SHORT);
-            return;
-        }
-        setIsReasonModalVisible(true);
+    // Toggle slide animation for bottom card
+    const toggleSlide = () => {
+        Animated.parallel([
+            Animated.spring(slideAnim, {
+                toValue: isCardOpen ? height * 0.65 : height * 0.25,
+                tension: 80,
+                friction: 12,
+                useNativeDriver: true,
+            }),
+            Animated.timing(fadeAnim, {
+                toValue: isCardOpen ? 0 : 1,
+                duration: 200,
+                useNativeDriver: true,
+            }),
+        ]).start(() => setIsCardOpen(!isCardOpen));
     };
 
-
-    const handleReasonSelect = (reason: string) => {
-        setSelectedReason(reason);
-        setIsReasonModalVisible(false);
-        setIsConfirmModalVisible(true);
-    };
-
-
-    const fetchRideDetails = async () => {
-        try {
-            const response: any = await apiUtils.get('/api/ride/detail');
-            if (response?.success) {
-                setRideDetails(response.ride);
-                console.log('Ride details fetched:', response.ride);
-                return response?.ride?.status;
-            } else {
-                ToastAndroid.show(response?.message || 'Failed to fetch ride details', ToastAndroid.SHORT);
-                return null;
-            }
-        } catch (error: any) {
-            ToastAndroid.show(error.message || 'Error fetching ride details', ToastAndroid.LONG);
-            return null;
-        }
-    };
-
+    // Handle ride data loading
     useEffect(() => {
-        const getRideDetails = async () => {
-            await fetchRideDetails();
-        };
-        getRideDetails();
-    }, []);
-
-
-
-    const handleCancelConfirm = async () => {
-        if (!rideDetails?._id) {
-            ToastAndroid.show('No active ride found', ToastAndroid.SHORT);
-            return;
+        if (ride) {
+            setRideDetails({
+                ...ride,
+                eta: `${Math.ceil(ride.duration)} mins`, // Derive ETA from duration
+            });
+            setIsLoading(false);
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            setTimeout(() => {
+                setIsLoading(false);
+                if (!ride) {
+                    ToastAndroid.show('No ride details available', ToastAndroid.LONG);
+                }
+            }, 1000);
         }
+    }, [ride]);
 
-        try {
-            const payload = {
-                cancelledBy: 'user',
-                reason: selectedReason,
-            };
-
-            const response: any = await apiUtils.post(`/api/ride/cancel/${rideDetails._id}`, payload);
-            if (response?.success) {
-                ToastAndroid.show('Ride cancelled successfully', ToastAndroid.SHORT);
-                navigation.navigate('HomeScreen');
-            } else {
-                ToastAndroid.show(response?.message || 'Failed to cancel ride', ToastAndroid.SHORT);
-            }
-        } catch (error: any) {
-            ToastAndroid.show(error.message || 'Error cancelling ride', ToastAndroid.LONG);
-        } finally {
-            setIsConfirmModalVisible(false);
-            setSelectedReason('');
-        }
+    // Handle profile press
+    const handleProfilePress = () => {
+        ToastAndroid.show('Viewing driver profile', ToastAndroid.SHORT);
     };
+
+    // Handle call driver
+    const handleCallDriver = () => {
+        ToastAndroid.show(`Calling ${rideDetails?.driver?.name}...`, ToastAndroid.SHORT);
+        // Implement actual call functionality using Linking if needed
+    };
+
+    const makeCall = () => {
+        const phone = rideDetails?.driver?.phoneNumber;
+        if (!phone) {
+            return ToastAndroid.show('No phone number available', ToastAndroid.SHORT);
+        }
+        Linking.openURL(`tel:${phone}`);
+    };
+
+    // Handle cancel ride with confirmation
+    const handleCancelRide = () => {
+        Alert.alert(
+            'Cancel Ride',
+            'Are you sure you want to cancel this ride?',
+            [
+                { text: 'No', style: 'cancel' },
+                {
+                    text: 'Yes',
+                    onPress: () => {
+                        ToastAndroid.show('Ride cancelled', ToastAndroid.SHORT);
+                        navigation.goBack();
+                    },
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color={THEAMCOLOR.PrimaryGreen} />
+                    <Text style={styles.loaderText}>Loading ride details...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // Error state
+    if (!rideDetails) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loaderContainer}>
+                    <Text style={styles.errorText}>Failed to load ride details.</Text>
+                    <TouchableOpacity
+                        style={styles.retryButton}
+                        onPress={() => navigation.goBack()}
+                        accessibilityLabel="Go back"
+                    >
+                        <Text style={styles.retryButtonText}>Go Back</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
-            <BackButton style={styles.backButton} />
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                bounces={true}
-            >
-                <MapView
-                    style={styles.map}
-                    region={{
-                        latitude: 28.6139,
-                        longitude: 77.2090,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01,
-                    }}
-                    scrollEnabled={false} // Disable map scrolling to avoid nested scrolling
-                    zoomEnabled={true}
-                    pitchEnabled={true}
-                    rotateEnabled={true}
+            {/* Back Button */}
+            <BackButton />
+
+            {/* Map Component */}
+            <CabMap
+                pickupCoords={{
+                    latitude: rideDetails?.pickup?.coordinates?.[0] ?? 0,
+                    longitude: rideDetails?.pickup?.coordinates?.[1] ?? 0,
+                }}
+                dropCoords={{
+                    latitude: rideDetails?.drops?.[0]?.coordinates?.[0] ?? 0,
+                    longitude: rideDetails?.drops?.[0]?.coordinates?.[1] ?? 0,
+                }}
+                driverCoords={{
+                    latitude: rideDetails?.driver?.location?.coordinates?.[0] ?? 0,
+                    longitude: rideDetails?.driver?.location?.coordinates?.[1] ?? 0,
+                }}
+            />
+
+            {/* Bottom Card */}
+            <Animated.View style={[styles.bottomCard, { transform: [{ translateY: slideAnim }] }]}>
+                <LinearGradient
+                    colors={[THEAMCOLOR.PureWhite, THEAMCOLOR.SecondarySmokeWhite]}
+                    style={styles.gradient}
                 >
-                    <Marker coordinate={{ latitude: 28.6139, longitude: 77.2090 }} title="Your Location" />
-                </MapView>
-                <View style={styles.card}>
-                    <View style={styles.profileRow}>
-                        <Image source={{ uri: request.userImage }} style={styles.avatar} />
-                        <View style={styles.info}>
-                            <View style={styles.starContainer}>
-                                <Text style={styles.name}>{rideDetails?.driver?.name}</Text>
-                                {[...Array(rideDetails?.driver?.rating || 0)].map((_, index) => (
-                                    <Icon key={index} name="star" size={16} color="#FFB700" />
-                                ))}
-                                {/* {[...Array(5 - rideDetails?.driver?.rating || 0)].map((_, index) => (
-                                    <Icon key={index} name="star-outline" size={16} color="#000" />
-                                ))} */}
-                            </View>
-                            <Text style={styles.detail}>{rideDetails?.driver?.vehicle?.model + ' • ' + rideDetails?.driver?.vehicle?.number}</Text>
-                        </View>
-                        <View style={styles.actions}>
-                            <TouchableOpacity style={styles.callBtn}>
-                                <Ionicons size={20} name="call-outline" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.msgBtn} onPress={() => navigation.navigate('ChatScreen')}>
-                                <MaterialCommunityIcons size={20} name="message-processing-outline" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                    <View style={styles.detailsRow}>
-                        <View style={styles.info}>
-                            <Text style={styles.name2}>Driver is on the way</Text>
-                            <Text style={styles.detail2}>
-                                400 m away • ETA <Text style={{ color: THEAMCOLOR?.PrimaryGreen, fontFamily: THEAMFONTFAMILY.NunitoSemiBold }}>6 min</Text>
+                    {/* Notch for sliding */}
+                    <TouchableOpacity
+                        style={styles.notch}
+                        onPress={toggleSlide}
+                        accessibilityLabel={isCardOpen ? 'Collapse card' : 'Expand card'}
+                    >
+                        <View style={styles.notchBar} />
+                    </TouchableOpacity>
+
+                    {/* Card Content */}
+                    <Animated.View style={[styles.cardContent,]}>
+                        {/* Collapsed State Content */}
+                        <View style={styles.collapsedContent}>
+                            <Text numberOfLines={1} style={[styles.vehicleText, { color: THEAMCOLOR.PrimaryGreen, position: 'absolute', top: 0, right: 0, fontWeight: 600, fontSize: 12, }]}>
+                                OTP : {rideDetails.pin}
                             </Text>
-                        </View>
-                        <View>
-                            <Text style={styles.cash}>Pin</Text>
-                            <Text style={styles.amount}>{rideDetails?.pin}</Text>
-                        </View>
-                    </View>
-                    <View style={styles.detailsRow3}>
-                        <View style={styles.info}>
-                            <Text style={styles.name2}>Ride Details</Text>
-                        </View>
-                        <View style={styles.moneyBox}>
-                            <Image source={ImagePath?.location2} style={styles.money} />
-                            <Text style={styles.detail2}>{rideDetails?.distance} Km</Text>
-                        </View>
-                    </View>
-                    <TouchableOpacity
-                        style={styles.pathRow}
-                        onPress={async () => {
-                            const status = await fetchRideDetails();
-                            RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen') : (RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen') : ToastAndroid.show('Ride is not started, Please wait for the driver to start the ride', ToastAndroid.SHORT));
-
-                        }}>
-                        <View style={styles.iconColumn}>
-                            <View style={styles.greenCircle} />
-                            <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.verticalLine} />
-                            <View style={styles.redCircle} />
-                        </View>
-                        <View style={styles.textColumn}>
-                            <Text style={styles.location}>{rideDetails?.pickup?.address}</Text>
-                            <View style={styles.border} />
-                            <Text style={styles.location2}>{rideDetails?.drops[0]?.address}</Text>
-                        </View>
-                    </TouchableOpacity>
-                    {/* <TouchableOpacity
-                        style={styles.confirmButton}
-                        onPress={() => navigation.navigate('InRideScreen')}
-                    >
-                        <Text style={styles.confirmButtonText}>Confirm your arrival</Text>
-                    </TouchableOpacity> */}
-                    <TouchableOpacity
-                        style={styles.cancelButton}
-                        onPress={handleCancelInitiate}
-                    >
-                        <Text style={styles.cancelButtonText}>Cancel Ride</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Reason Selection Modal */}
-                <Modal
-                    animationType="slide"
-                    transparent={true}
-                    visible={isReasonModalVisible}
-                    onRequestClose={() => setIsReasonModalVisible(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <TouchableOpacity
-                                style={styles.closeButton}
-                                onPress={() => setIsReasonModalVisible(false)}
-                            >
-                                <Ionicons name="close" size={24} color="#333" />
-                            </TouchableOpacity>
-                            <Text style={styles.modalTitle}>Select Cancellation Reason</Text>
-                            {cancelReasons.map((option) => (
-                                <TouchableOpacity
-                                    key={option.id}
-                                    style={styles.radioOption}
-                                    onPress={() => handleReasonSelect(option.label)}
-                                >
-                                    <Text style={styles.radioText}>{option.label}</Text>
-                                    <View style={styles.radioCircle}>
-                                        {selectedReason === option.label && <View style={styles.radioSelected} />}
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                </Modal>
-
-                {/* Confirmation Modal */}
-                <Modal
-                    animationType="slide"
-                    transparent={true}
-                    visible={isConfirmModalVisible}
-                    onRequestClose={() => setIsConfirmModalVisible(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <TouchableOpacity
-                                style={styles.closeButton}
-                                onPress={() => setIsConfirmModalVisible(false)}
-                            >
-                                <Ionicons name="close" size={24} color="#333" />
-                            </TouchableOpacity>
-                            <Text style={styles.modalTitle}>Confirm Cancellation</Text>
-                            <Text style={styles.radioText}>Are you sure you want to cancel the ride?</Text>
-                            <Text style={styles.radioText}>Reason: {selectedReason}</Text>
-                            <View style={styles.confirmButtonContainer}>
-                                <TouchableOpacity
-                                    style={[styles.cancelButton2, { flex: 1, marginRight: 5 }]}
-                                    onPress={() => setIsConfirmModalVisible(false)}
-                                >
-                                    <Text style={styles.cancelButtonText2}>No</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.confirmButton2, { flex: 1, marginLeft: 5 }]}
-                                    onPress={handleCancelConfirm}
-                                >
-                                    <Text style={styles.confirmButtonText2}>Yes</Text>
-                                </TouchableOpacity>
+                            <View style={styles.driverInfo}>
+                                <Image
+                                    source={ImagePath.Profile} // Replace with actual driver image
+                                    style={styles.driverAvatar}
+                                    accessibilityLabel="Driver avatar"
+                                />
+                                <View style={styles.driverDetails}>
+                                    <Text style={styles.driverName}>{rideDetails.driver.name}</Text>
+                                    <Text style={styles.driverRating}>
+                                        {rideDetails.driver.rating > 0
+                                            ? `★ ${rideDetails.driver.rating.toFixed(1)}`
+                                            : 'New Driver'}
+                                    </Text>
+                                    <Text numberOfLines={1} style={styles.vehicleText}>
+                                        {rideDetails.driver.vehicle.model} • {rideDetails.driver.vehicle.number}
+                                    </Text>
+                                </View>
+                                <View style={styles.actions}>
+                                    <TouchableOpacity style={styles.callBtn} onPress={makeCall}>
+                                        <Ionicons size={20} name="call-outline" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.msgBtn} onPress={() => navigation.navigate('ChatScreen')}>
+                                        <MaterialCommunityIcons size={20} name="message-processing-outline" />
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
-                    </View>
-                </Modal>
-            </ScrollView>
-        </SafeAreaView >
+
+
+                        {/* Trip Status */}
+                        <Text style={styles.etaText}>
+                            Driver is {rideDetails.eta} away • {rideDetails.distance} km
+                        </Text>
+
+                        {/* Trip Details */}
+                        <View style={styles.tripDetails}>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="location-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Pickup</Text>
+                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails.pickup.address}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="flag-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Drop-off</Text>
+                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails.drops[0].address}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="cash-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Fare ({rideDetails.paymentMode})</Text>
+                                    <Text style={styles.detailText}>₹{rideDetails.fare.toFixed(2)}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.detailRow}>
+                                <Ionicons name="time-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
+                                <View style={styles.detailTextContainer}>
+                                    <Text style={styles.detailLabel}>Distance & Duration</Text>
+                                    <Text style={styles.detailText}>
+                                        {rideDetails.distance} km • {rideDetails.eta}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Action Buttons */}
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity
+                                style={styles.actionBtn}
+                                // onPress={handleCallDriver}
+                                activeOpacity={0.8}
+                                accessibilityLabel="Call driver"
+                                onPress={async () => {
+                                    const status = await fetchRideDetails(setRideDetails);
+                                    RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen') : (RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen') : ToastAndroid.show('Ride is not started, Please wait for the driver to start the ride', ToastAndroid.SHORT));
+
+                                }}>
+                                {/* <Ionicons name="call-outline" size={20} color="#fff" /> */}
+                                <Text style={styles.actionBtnText}>Confirm Arrival</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.cancelBtn]}
+                                onPress={handleCancelRide}
+                                activeOpacity={0.8}
+                                accessibilityLabel="Cancel ride"
+                            >
+                                <Ionicons name="close-outline" size={20} color="#fff" />
+                                <Text style={styles.actionBtnText}>Cancel Ride</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Animated.View>
+                </LinearGradient>
+            </Animated.View>
+        </SafeAreaView>
     );
 };
 
-export default DriverApprochScreen;
+export default DriverApproachScreen;
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: THEAMCOLOR?.SecondarySmokeWhite,
+        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
     },
-    scrollView: {
+    loaderContainer: {
         flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    scrollContent: {
-        flexGrow: 1,
+    loaderText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#d32f2f',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        marginBottom: 20,
+    },
+    retryButton: {
+        backgroundColor: THEAMCOLOR.PrimaryGreen,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+    },
+    retryButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 16,
+        fontFamily: THEAMFONTFAMILY.PoppinsBold,
     },
     backButton: {
         position: 'absolute',
         top: 20,
         left: 20,
-        zIndex: 2,
+        zIndex: 10,
     },
-    map: {
-        width,
-        height: height * 0.47, // Match InRideScreen map height
-        alignSelf: 'center',
-        overflow: 'hidden',
-    },
-    card: {
+    bottomCard: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        width: width,
+        height: height * 0.83,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
-        borderWidth: 1,
-        borderColor: '#fafafa',
-        overflow: 'hidden',
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
+    gradient: {
+        flex: 1,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
         paddingBottom: 20,
-        // shadowColor: '#000',
-        // shadowOffset: { width: 0, height: -2 },
-        // shadowOpacity: 0.1,
-        // shadowRadius: 4,
-        // elevation: 5,
     },
-    profileRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    notch: {
+        width: '100%',
         alignItems: 'center',
-        padding: 15,
+        paddingVertical: 12,
+    },
+    notchBar: {
+        width: 50,
+        height: 5,
+        backgroundColor: '#ccc',
+        borderRadius: 2.5,
+    },
+    cardContent: {
+        paddingHorizontal: 20,
+        flex: 1,
         borderBottomWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: 'lightgray',
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+        borderBottomColor: 'gray'
     },
-    detailsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    collapsedContent: {
         alignItems: 'center',
-        paddingHorizontal: 15,
-        paddingBottom: 5,
-        marginBottom: 10,
+        // paddingVertical: 10,
     },
-    detailsRow3: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-    },
-    pathRow: {
+    driverInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#f0f2f5',
-        borderRadius: 15,
+    },
+    driverAvatar: {
+        width: 50,
+        height: 50,
+        borderRadius: 30,
+        marginRight: 15,
         backgroundColor: '#fff',
-        // shadowColor: 'gray',
-        // shadowOffset: { width: 1, height: 1 },
-        // shadowOpacity: 0.5,
-        // shadowRadius: 10,
-        elevation: 5,
-        marginHorizontal: 15,
-        padding: 15,
-        marginVertical: 10,
+        // borderWidth: 1,
+        overflow: 'hidden'
     },
-    iconColumn: {
-        alignItems: 'center',
-        marginRight: 10,
-    },
-    greenCircle: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: 'green',
-    },
-    redCircle: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: 'red',
-    },
-    verticalLine: {
-        width: 2,
-        height: 30,
-        marginVertical: 2,
-    },
-    textColumn: {
-        justifyContent: 'space-between',
-        height: 60,
-        width: width * 0.75,
-    },
-    avatar: {
-        width: 45,
-        height: 45,
-        borderRadius: 22,
-        marginRight: 10,
-    },
-    info: {
+    driverDetails: {
         flex: 1,
     },
-    starContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    name: {
-        fontWeight: '600',
+    driverName: {
         fontSize: 13,
-        marginRight: 10,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        fontWeight: '400',
+        color: THEAMCOLOR.PrimaryGreen,
+        fontFamily: THEAMFONTFAMILY.PoppinsBold,
     },
-    name2: {
-        fontWeight: '600',
+    driverRating: {
+        fontSize: 11,
+        color: '#666',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+    },
+    vehicleText: {
+        fontSize: 11,
+        color: '#666',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+    },
+    etaText: {
         fontSize: 14,
-        marginBottom: 5,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        fontWeight: '500',
+        color: THEAMCOLOR.PrimaryGreen,
+        textAlign: 'center',
+        marginVertical: 10,
+        fontFamily: THEAMFONTFAMILY.PoppinsMedium,
     },
-    detail: {
-        color: '#666',
-        fontSize: 11,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+    tripDetails: {
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+        paddingTop: 15,
     },
-    detail2: {
-        color: '#666',
-        fontSize: 12,
-        marginBottom: 5,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
-    amount: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: '#4CAF50',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
-    cash: {
-        textAlign: 'right',
-        color: 'gray',
-        fontSize: 11,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
-    moneyBox: {
+    detailRow: {
         flexDirection: 'row',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
+        alignItems: 'flex-start',
+        marginBottom: 15,
     },
-    money: {
-        width: 20,
-        height: 18,
-        marginRight: 5,
-        resizeMode: 'contain',
+    detailTextContainer: {
+        flex: 1,
+        marginLeft: 10,
     },
-    location: {
+    detailLabel: {
         fontSize: 11,
-        color: '#333',
-        marginVertical: 3,
-        marginBottom: 10,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+        color: '#999',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
     },
-    border: {
-        width: '100%',
-        borderStyle: 'dashed',
-        borderColor: 'lightgray',
-        borderBottomWidth: 1,
-    },
-    location2: {
-        fontSize: 11,
+    detailText: {
+        fontSize: 12,
         color: '#333',
-        marginVertical: 2,
-        marginTop: 10,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        marginTop: 2,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
     },
     actions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         width: width * 0.25,
-        marginTop: 10,
+        marginTop: 16,
     },
     callBtn: {
-        backgroundColor: THEAMCOLOR?.SecondaryWhite,
+        backgroundColor: THEAMCOLOR?.PureWhite,
         borderWidth: 1,
         borderColor: 'gray',
         justifyContent: 'center',
@@ -495,7 +488,7 @@ const styles = StyleSheet.create({
         borderRadius: 22,
     },
     msgBtn: {
-        backgroundColor: THEAMCOLOR?.SecondaryWhite,
+        backgroundColor: THEAMCOLOR?.PureWhite,
         borderWidth: 1,
         borderColor: 'gray',
         justifyContent: 'center',
@@ -504,155 +497,24 @@ const styles = StyleSheet.create({
         height: 40,
         borderRadius: 22,
     },
-    withdrawSection: {
-        marginHorizontal: 15,
-        marginVertical: height * 0.02,
-    },
-    amountButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-start',
-        gap: 15,
-        marginVertical: height * 0.01,
-    },
-    amountButton: {
-        borderWidth: 1,
-        borderColor: 'gray',
-        paddingVertical: 3,
-        paddingHorizontal: 15,
-        borderRadius: 20,
-    },
-    amountButtonText: {
-        fontSize: 10,
-        fontWeight: '500',
-        color: THEAMCOLOR.PrimaryGreen,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
-    confirmButton: {
-        backgroundColor: THEAMCOLOR?.PrimaryGreen,
-        paddingVertical: 12,
-        borderRadius: 15,
-        marginHorizontal: 15,
-        marginVertical: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    confirmButtonText: {
-        color: '#fff',
-        fontSize: width * 0.035,
-        fontWeight: 'bold',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    cancelButton: {
-        backgroundColor: THEAMCOLOR?.SecondaryWhite,
-        paddingVertical: 12,
-        borderRadius: 15,
-        marginHorizontal: 15,
-        marginVertical: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderColor: 'lightgray',
-        borderWidth: 1,
-    },
-    cancelButtonText: {
-        color: THEAMCOLOR?.PrimaryGreen,
-        fontSize: width * 0.035,
-        fontWeight: 'bold',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    modalOverlay: {
+    actionBtn: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalContent: {
-        width: width * 0.9,
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 20,
-    },
-    modalTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 15,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    radioOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 10,
-    },
-    radioText: {
-        fontSize: 14,
-        color: '#333',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    radioCircle: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: THEAMCOLOR.PrimaryGreen,
-        alignItems: 'center',
         justifyContent: 'center',
-    },
-    radioSelected: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
         backgroundColor: THEAMCOLOR.PrimaryGreen,
+        paddingVertical: 12,
+        borderRadius: 12,
+        marginHorizontal: 5,
     },
-    closeButton: {
-        position: 'absolute',
-        top: 15,
-        right: 15,
-        width: 30,
-        height: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    confirmButtonContainer: {
-        flexDirection: 'row',
-        marginTop: 20,
-    },
-
-    cancelButton2: {
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
-        paddingVertical: 10,
-        marginHorizontal: 15,
-        borderRadius: 10,
-        alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 3,
-    },
-    confirmButton2: {
-        backgroundColor: THEAMCOLOR.PrimaryGreen,
-        paddingVertical: 10,
-        marginHorizontal: 15,
-        borderRadius: 10,
-        alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 3,
-    },
-    cancelButtonText2: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: THEAMCOLOR.SecondaryBlack,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    confirmButtonText2: {
-        fontSize: 14,
-        fontWeight: 'bold',
+    actionBtnText: {
         color: '#fff',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        fontWeight: 'bold',
+        fontSize: 14,
+        marginLeft: 5,
+        fontFamily: THEAMFONTFAMILY.PoppinsBold,
+    },
+    cancelBtn: {
+        backgroundColor: '#d32f2f',
     },
 });

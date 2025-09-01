@@ -1,39 +1,61 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, Dimensions, Image } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Dimensions,
+  Image,
+  Animated,
+  PermissionsAndroid,
+  Platform,
+  ToastAndroid,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Entypo from 'react-native-vector-icons/Entypo';
-import { LINE_HEIGHT, RADIUS, SHADOW, SPACING, TEXT_SIZE, THEAMCOLOR, THEAMFONTFAMILY } from '../../assets/theam/theam';
-import { useNavigation } from '@react-navigation/native';
-import ImagePath from '../constants/ImagePath';
 import { ScrollView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  LINE_HEIGHT,
+  RADIUS,
+  SHADOW,
+  SPACING,
+  TEXT_SIZE,
+  THEAMCOLOR,
+  THEAMFONTFAMILY,
+} from '../../assets/theam/theam';
+
+import ImagePath from '../constants/ImagePath';
+import { useAuth } from '../context/authcontext';
+import CabMap from '../Components/common/CabMap';
+import GooglePlacesAutocompleteComponent from '../Components/common/GooglePlacesAutocompleteComponent';
+import { getCurrentLocationWithAddress } from '../utils/tools/locationServices';
+import apiUtils from '../utils/apiUtils';
+import { fetchRideDetails, RideStatus } from '../screens/rideScreens/BookRideScreen';
 
 const { width, height } = Dimensions.get('screen');
 
 export interface Location {
   address: string;
-  coordinates: [number, number]; // [longitude, latitude]
+  coordinates: [number, number];
 }
 
 export interface RouteDetails {
   pickup: Location;
   drops: Location[];
-  vehicleType: string; // Type of vehicle for the ride
+  vehicleType: string;
 }
-
 
 const rideOptions = [
   { id: 'auto', name: 'Auto', image: ImagePath.auto },
-  // { id: '2', name: 'Alo Black', image: ImagePath.car1 },
-  // { id: '3', name: 'Alo Pool', image: ImagePath.car2 },
-  // { id: '4', name: 'Alo Moto', image: ImagePath.car3 },
-  // { id: '4', name: 'Alo Moto', image: ImagePath.car4 },
 ];
 
-const savedDestinations = [
+const savedDestinationsLocal = [
   {
     id: '1',
     label: 'Home',
@@ -73,19 +95,140 @@ const savedDestinations = [
 ];
 
 const HomeScreen = () => {
+  const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
-  const [user, setUser] = useState<any>();
-  const initialRegion = {
-    latitude: 28.6139, // Coordinates for Connaught Place, New Delhi
-    longitude: 77.2090,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
+  const { getCurrentUser }: any = useAuth();
+  const [location, setLocation] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [isOnline, setIsOnline] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [savedDestinations, setSavedDestinations] = useState<any>(null);
+  const [selectedPlace, setSelectedPlace] = useState<any>(null);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const [saving, setSaving] = useState(false);
+  const [activeRide, setActiveRide] = useState<any>(null)
+
+  const handlePlaceSelect = async (place: any) => {
+    setSaving(true);
+    setSelectedPlace(place);
+    try {
+      const response: any = await apiUtils.post('/api/location', {
+        label: place.address,
+        address: place.address,
+        coordinates: [place.latitude, place.longitude],
+        description: place.address,
+      });
+      ToastAndroid.show(
+        response?.success ? 'Location saved!' : 'Save failed',
+        ToastAndroid.SHORT
+      );
+    } catch {
+      ToastAndroid.show('Error saving location', ToastAndroid.SHORT);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const routeCoordinates = [
-    { latitude: 28.6139, longitude: 77.2090 }, // Starting point (Karail Singh Stadium)
-    { latitude: 28.6239, longitude: 77.2190 }, // End point (near Connaught Place)
-  ];
+  const handleGetSaveLocation = async () => {
+    setIsLoading(true);
+    try {
+      const response: any = await apiUtils.get('/api/location');
+      if (response?.success) {
+        setSavedDestinations(response?.data); // Uncomment when API is ready
+      } else {
+        ToastAndroid.show('Failed to fetch saved locations', ToastAndroid.SHORT);
+      }
+    } catch {
+      ToastAndroid.show('Error fetching saved locations', ToastAndroid.SHORT);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const requestLocationPermission = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          await getCurrentLocationWithAddress(setLocation, setIsLoading);
+        }
+      } else {
+        await getCurrentLocationWithAddress(setLocation, setIsLoading);
+      }
+    } catch {
+      ToastAndroid.show('Location permission denied', ToastAndroid.SHORT);
+    }
+  };
+
+  const loadUser = async () => {
+    try {
+      const userString = await AsyncStorage.getItem('user');
+      const isUser = await getCurrentUser('');
+      if (userString && isUser) {
+        setUser(JSON.parse(userString));
+      }
+    } catch {
+      ToastAndroid.show('Failed to load user', ToastAndroid.SHORT);
+    }
+  };
+  const fetchRide = async (isRiding = false) => {
+    try {
+      const url = "/api/ride/active/ride"
+      const response: any = await apiUtils.get(url);
+      console.log(response)
+      if (response.success && response.data) {
+        setActiveRide(response.data);
+      } else {
+        setActiveRide(null)
+      }
+    } catch (error) {
+      console.log(error)
+      ToastAndroid.show('Failed to fetch rides', ToastAndroid.SHORT);
+      setActiveRide(null)
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initialize = async () => {
+      try {
+        setIsLoading(true);
+        await requestLocationPermission();
+        await getCurrentLocationWithAddress(setLocation, setIsLoading);
+        await loadUser();
+        await handleGetSaveLocation();
+        await fetchRide()
+      } catch {
+        ToastAndroid.show('Initialization failed', ToastAndroid.SHORT);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    initialize();
+
+    Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    return () => {
+      isMounted = false;
+      shimmerAnim.setValue(0);
+    };
+  }, [isFocused]);
+
+  useEffect(() => {
+    console.log(selectedPlace)
+
+  }, [setSelectedPlace])
+
 
   const renderRideOption = ({ item }: { item: { id: string; name: string; image: string } }) => (
     <TouchableOpacity onPress={() => navigation.navigate('RideSelectionScreen')}>
@@ -96,168 +239,205 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderSavedDestination = ({ item, index }: { item: { id: string; label: string; address: string }, index: number }) => (
+  const renderSavedDestination = ({ item, index }: { item: any; index: number }) => (
     <>
       <TouchableOpacity style={styles.savedDestination}>
         <View>
-          <Text style={styles.savedLabel}>{item.label}</Text>
-          <Text style={styles.savedAddress}>{item.address}</Text>
+          <Text numberOfLines={1} style={styles.savedLabel}>{item.label}</Text>
+          <Text numberOfLines={1} style={styles.savedAddress}>{item.address}</Text>
         </View>
         <Icon name="chevron-right" size={TEXT_SIZE.h1} color={THEAMCOLOR.SecondaryGray} />
       </TouchableOpacity>
-      {/* Only show lineHr if it's not the last item */}
       {index < savedDestinations.length - 1 && <View style={styles.lineHr} />}
     </>
   );
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const user = await AsyncStorage.getItem('userData');
-        if (user) {
-          setUser(JSON.parse(user));
-        }
-      } catch (error) {
-        console.error('Failed to load user data:', error);
-      }
-    };
-
-    fetchUserData();
-  }, []);
-
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView>
-        <View style={styles.headerContainer}>
-          <View style={{ width: 50, height: 'auto' }}>
-            <TouchableOpacity style={{ borderRadius: '100%', borderWidth: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderColor: 'lightgray', height: 40, width: 40, }} onPress={() => navigation.openDrawer()}>
-              <Entypo name="dots-three-horizontal" size={20} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.header}>
-            <Text style={styles.headerText}>{user?.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Image source={ImagePath.pin} style={{ width: 10, height: 15, resizeMode: 'contain' }} />
-              <Text style={styles.subHeaderText}>223, A Pocket, Dwarka, New Delhi</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+        <ScrollView>
+          <View style={styles.headerContainer}>
+            <View style={{ width: 50 }}>
+              <TouchableOpacity
+                style={{
+                  borderRadius: 100,
+                  borderWidth: 1,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderColor: 'lightgray',
+                  height: 40,
+                  width: 40,
+                }}
+                onPress={() => navigation.openDrawer()}
+              >
+                <Entypo name="dots-three-horizontal" size={20} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.header}>
+              <Text style={styles.headerText}>{user?.name ?? "Your Name"}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Image source={ImagePath.pin} style={{ width: 10, height: 15, resizeMode: 'contain' }} />
+                <Text
+                  numberOfLines={1}
+                  style={styles.subHeaderText}
+                >
+                  {location?.address?.locality && location?.address?.city
+                    ? `${location.address.locality}, ${location.address.city}`
+                    : 'Unknown location'}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-        {/* Map View */}
-        <View style={styles.mapContainer}>
-          <MapView style={styles.map} initialRegion={initialRegion}>
-            <Marker coordinate={routeCoordinates[0]} pinColor={THEAMCOLOR.PrimaryRed} />
-            <Marker coordinate={routeCoordinates[1]} pinColor={THEAMCOLOR.PrimaryGreen} />
-            <Polyline coordinates={routeCoordinates} strokeColor={THEAMCOLOR.PrimaryGreen} strokeWidth={4} />
-          </MapView>
-        </View>
 
+          <View style={styles.bottomSheet}>
+            <GooglePlacesAutocompleteComponent onSelect={handlePlaceSelect} currentLocation={location} />
 
-
-        {/* Bottom Sheet */}
-        <View style={styles.bottomSheet}>
-          {/* Search Input */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputRow}>
-              <Icon name="search" size={TEXT_SIZE.h1} color={THEAMCOLOR.SecondaryGray} />
-              <TextInput
-                placeholder="Where you want to go?"
-                placeholderTextColor={THEAMCOLOR.SecondaryGray}
-                style={styles.input}
+            <View style={{ height: height * 0.55, borderRadius: 10, marginTop: 10, overflow: 'hidden' }}>
+              <CabMap
+                pickupCoords={
+                  selectedPlace?.longitude && selectedPlace?.latitude
+                    ? {
+                      latitude: selectedPlace.latitude,
+                      longitude: selectedPlace.longitude,
+                    }
+                    : null
+                }
               />
             </View>
-            {savedDestinations.map((item) => (
+
+            {/* <Text style={styles.sectionTitle}>Ride the way you want</Text>
+            <FlatList
+              data={rideOptions}
+              renderItem={renderRideOption}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rideOptionsList}
+            /> */}
+
+            {activeRide && activeRide?.status !== RideStatus.COMPLETED && (
               <TouchableOpacity
-                key={item.id}
-                onPress={() =>
-                  navigation.navigate('DestinationScreen', {
-                    destination: {
-                      label: item.label,
-                      address: item.address,
-                      coordinates: item.coordinates,
-                    },
-                  })
-                }
+                onPress={async () => {
+                  const pickupLocation = {
+                    address: activeRide.pickup.address,
+                    coordinates: activeRide.pickup.coordinates,
+                  };
+
+                  const dropLocation = {
+                    address: activeRide.drops[0]?.address,
+                    coordinates: activeRide.drops[0]?.coordinates,
+                  };
+
+                  const selectedRide = activeRide.vehicleType;
+                  const selectedPayment = activeRide.paymentMode;
+                  const status = await fetchRideDetails(setActiveRide); // Make sure to await this
+                  switch (status) {
+                    case RideStatus.REQUESTED:
+                      navigation.navigate('BookRideScreen', {
+                        pickupLocation,
+                        dropLocation,
+                        vehicleType: selectedRide,
+                        paymentMethod: selectedPayment,
+                        ride: activeRide,
+                      });
+                      break;
+
+                    case RideStatus.ACCEPTED:
+                      navigation.navigate('DriverApprochScreen', { ride: activeRide });
+                      break;
+
+                    case RideStatus.ONGOING:
+                      navigation.navigate('InRideScreen', { ride: activeRide });
+                      break;
+
+                    case RideStatus.COMPLETED:
+                      navigation.navigate('AfterRideScreen', { ride: activeRide });
+                      break;
+
+                    default:
+                      ToastAndroid.show(
+                        'Ride is not accepted, Please wait for the driver to accept the ride',
+                        ToastAndroid.SHORT
+                      );
+                      break;
+                  }
+
+                }}
               >
-                <View style={styles.locationRow}>
-                  <Image
-                    source={ImagePath.rideHistory}
-                    style={{ tintColor: THEAMCOLOR.SecondaryGray }}
-                  />
-                  <Text style={styles.locationText}>{item.address}</Text>
-                  <Icon
-                    name="chevron-right"
-                    size={TEXT_SIZE.h2}
-                    color={THEAMCOLOR.SecondaryGray}
-                  />
+                <View style={styles.rideCard}>
+                  {/* Header with vehicle and PIN */}
+                  <View style={styles.headerRow}>
+                    <View style={styles.vehicleRow}>
+                      <Image source={ImagePath.auto} style={styles.vehicleImage} />
+                      <Text style={styles.vehicleText}>{activeRide.vehicleType.toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.statusText}>{activeRide.status.toUpperCase()}</Text>
+                  </View>
+
+                  {/* Timeline Section */}
+                  <View style={styles.timelineSection}>
+                    {/* Vertical Dots & Line */}
+                    <View style={styles.timeline}>
+                      <View style={styles.circle} />
+                      <View style={styles.line} />
+                      <View style={[styles.circle, { backgroundColor: '#06b700ff' }]} />
+                    </View>
+
+                    {/* Address Info */}
+                    <View style={styles.addressSection}>
+                      <Text numberOfLines={1} style={styles.addressText}>{activeRide.pickup.address}</Text>
+
+                      <Text numberOfLines={1} style={styles.addressText}>{activeRide.drops[0]?.address}</Text>
+                    </View>
+                  </View>
+
+                  {/* Bottom Row */}
+                  <View style={styles.bottomRow}>
+                    <Text style={styles.pinBox}>PIN: {activeRide.pin}</Text>
+
+                    <Text style={styles.priceText}>Fare: ₹{activeRide?.fare}</Text>
+                  </View>
                 </View>
               </TouchableOpacity>
-            ))}
+            )}
 
 
-          </View>
 
-          {/* Ride Options */}
-          <Text style={styles.sectionTitle}>Ride the way you want</Text>
-          <FlatList
-            data={rideOptions}
-            renderItem={renderRideOption}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rideOptionsList}
-          />
-
-          {/* Saved Destinations */}
-          <View style={styles.savedDestinationsContainer}>
-            <View style={styles.savedHeader}>
-              <Text style={styles.sectionTitle}>Saved Destinations</Text>
-              <TouchableOpacity>
-                <Text style={styles.seeAllText}>See all</Text>
-              </TouchableOpacity>
+            <View style={styles.savedDestinationsContainer}>
+              <View style={styles.savedHeader}>
+                <Text style={styles.sectionTitle}>Saved Destinations</Text>
+              </View>
+              {savedDestinations?.length === 0 ? <Text style={{ textAlign: 'center' }}>No Saved Location</Text> :
+                < FlatList
+                  data={savedDestinations}
+                  renderItem={renderSavedDestination}
+                  keyExtractor={(item) => item.id}
+                  showsVerticalScrollIndicator={false}
+                  style={{ backgroundColor: '#fff', padding: 5, borderRadius: 15 }}
+                />}
             </View>
-            <FlatList
-              data={savedDestinations}
-              renderItem={renderSavedDestination}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              style={{ backgroundColor: '#fff', padding: 5, borderRadius: 15 }}
-            />
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView >
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
-  },
-  mapContainer: {
-    height: height * 0.4,
-    width: '95%',
-    padding: 5,
-    borderRadius: 15,
-    marginHorizontal: 'auto',
-    overflow: 'hidden',
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  container: { flex: 1, backgroundColor: '#ffffffff' },
   headerContainer: {
-    height: height * 0.11,
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   header: {
-
-    backgroundColor: THEAMCOLOR.Transparent,
     padding: SPACING.sm,
-
   },
   headerText: {
     fontFamily: THEAMFONTFAMILY.LatoRegular,
@@ -273,65 +453,12 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     flex: 1,
-    backgroundColor: THEAMCOLOR.SecondaryWhite,
+    backgroundColor: THEAMCOLOR.PureWhite,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     paddingTop: SPACING.md,
     paddingHorizontal: SPACING.md,
     marginTop: -RADIUS.xl,
-  },
-  inputContainer: {
-    backgroundColor: THEAMCOLOR.PureWhite,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.sm,
-    marginBottom: SPACING.md,
-    ...SHADOW.light,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: THEAMCOLOR.BorderGray,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  input: {
-    flex: 1,
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
-    fontSize: TEXT_SIZE.body,
-    lineHeight: LINE_HEIGHT.body,
-    color: THEAMCOLOR.PureBlack,
-    paddingVertical: SPACING.sm,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-
-  },
-  lineHr: {
-    marginHorizontal: 'auto',
-    width: width * 0.87,
-    height: 1,
-    borderStyle: 'dashed',
-    borderBottomWidth: 1,
-    borderBottomColor: THEAMCOLOR.SecondaryGray,
-  },
-  locationText: {
-    flex: 1,
-    fontFamily: THEAMFONTFAMILY.NunitoRegular,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.body,
-    color: THEAMCOLOR.PureBlack,
-    marginLeft: SPACING.sm,
-  },
-  priceText: {
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
-    fontSize: TEXT_SIZE.body,
-    lineHeight: LINE_HEIGHT.body,
-    color: THEAMCOLOR.PureBlack,
-    marginRight: SPACING.sm,
   },
   sectionTitle: {
     fontFamily: THEAMFONTFAMILY.LatoRegular,
@@ -353,15 +480,10 @@ const styles = StyleSheet.create({
     ...SHADOW.light,
   },
   rideImage: {
-    width: 70, height: 60, resizeMode: 'contain',
-    marginBottom: 5,
-  },
-  rideImagePlaceholder: {
     width: 70,
-    height: 70,
-    backgroundColor: THEAMCOLOR.LightGray,
-    borderRadius: RADIUS.sm,
-    marginBottom: SPACING.xs,
+    height: 60,
+    resizeMode: 'contain',
+    marginBottom: 5,
   },
   rideText: {
     fontFamily: THEAMFONTFAMILY.LatoRegular,
@@ -371,18 +493,12 @@ const styles = StyleSheet.create({
   },
   savedDestinationsContainer: {
     flex: 1,
-    marginBottom: 30
+    marginBottom: 30,
   },
   savedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  seeAllText: {
-    fontFamily: THEAMFONTFAMILY.NunitoRegular,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    color: THEAMCOLOR.SecondaryGray,
   },
   savedDestination: {
     flexDirection: 'row',
@@ -396,7 +512,7 @@ const styles = StyleSheet.create({
     fontSize: TEXT_SIZE.body,
     lineHeight: LINE_HEIGHT.body,
     color: THEAMCOLOR.PrimaryGreen,
-    width: 60,
+    width: '100%',
   },
   savedAddress: {
     flex: 1,
@@ -405,6 +521,108 @@ const styles = StyleSheet.create({
     lineHeight: LINE_HEIGHT.body,
     color: THEAMCOLOR.SecondaryGray,
   },
+  lineHr: {
+    alignSelf: 'center',
+    width: width * 0.87,
+    height: 1,
+    borderStyle: 'dashed',
+    borderBottomWidth: 1,
+    borderBottomColor: THEAMCOLOR.SecondaryGray,
+  },
+  rideCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 5,
+    marginVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  vehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  vehicleImage: {
+    width: 45,
+    height: 45,
+    resizeMode: 'contain',
+    marginRight: 8,
+  },
+  vehicleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  pinBox: {
+    backgroundColor: '#ffffffff',
+    color: THEAMCOLOR.PrimaryGreen,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    fontWeight: 'semibold',
+    fontSize: 14,
+  },
+  timelineSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  timeline: {
+    width: 20,
+    alignItems: 'center',
+  },
+  circle: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#c45959ff',
+  },
+  line: {
+    width: 2,
+    height: 28,
+    backgroundColor: '#ccc',
+    marginVertical: 2,
+  },
+  addressSection: {
+    flex: 1,
+    paddingLeft: 12,
+  },
+  label: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 2,
+  },
+  addressText: {
+    fontSize: 12,
+    color: '#222',
+    fontWeight: '400',
+    marginBottom: 12,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  priceText: {
+    fontSize: 14,
+    fontWeight: 'semibold',
+    color: '#000',
+  },
 });
+
 
 export default HomeScreen;

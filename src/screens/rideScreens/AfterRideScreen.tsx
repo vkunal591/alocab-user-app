@@ -10,9 +10,9 @@ import {
   Alert,
   ToastAndroid,
 } from 'react-native';
-import React, {useEffect, useState} from 'react';
-import {SafeAreaView} from 'react-native-safe-area-context';
-import MapView, {Marker} from 'react-native-maps';
+import React, { useEffect, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MapView, { Marker } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {
   LINE_HEIGHT,
@@ -21,15 +21,16 @@ import {
   THEAMFONTFAMILY,
 } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import apiUtils from '../../utils/apiUtils';
-import {RideDetails} from './BookRideScreen';
+import { RideDetails } from './BookRideScreen';
+import ImagePath from '../../constants/ImagePath';
 
-const {width, height} = Dimensions.get('screen');
+const { width, height } = Dimensions.get('screen');
 
 const AfterRideScreen = () => {
   const route = useRoute();
-  const {rideId}: any = route.params;
+  const ride: any = route.params?.ride;
   const navigation = useNavigation<any>();
 
   const [feedback, setFeedback] = useState('');
@@ -37,7 +38,7 @@ const AfterRideScreen = () => {
   const [selectedTags, setSelectedTags] = useState<any>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<any>(null);
-  const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
+  const [rideDetails, setRideDetails] = useState<RideDetails | null>(ride ?? null);
   const [request] = useState({
     name: 'Nikhil',
     userImage: 'https://i.pravatar.cc/150?img=8',
@@ -45,7 +46,7 @@ const AfterRideScreen = () => {
 
   const fetchRideDetails = async () => {
     try {
-      const response: any = await apiUtils.get('/api/ride/detail');
+      const response: any = await apiUtils.get('/api/ride/active/ride');
       if (response?.success) {
         setRideDetails(response.ride);
         console.log('Ride details fetched:', response.ride);
@@ -115,12 +116,11 @@ const AfterRideScreen = () => {
 
     try {
       const requestData = {
-        rideId:rideDetails?._id || rideId,
+        rideId: ride?._id,
         rating,
         review: feedback.trim(),
         tags: selectedTags,
       };
-
       const response: any = await apiUtils.post('/api/review/', requestData);
       if (response.success) {
         ToastAndroid.show(
@@ -166,7 +166,7 @@ const AfterRideScreen = () => {
           pitchEnabled
           rotateEnabled>
           <Marker
-            coordinate={{latitude: 28.6139, longitude: 77.209}}
+            coordinate={{ latitude: 28.6139, longitude: 77.209 }}
             title="Your Location"
           />
         </MapView>
@@ -175,7 +175,7 @@ const AfterRideScreen = () => {
             <Text style={styles.name}>
               Rate Driver: {rideDetails?.driver?.name}
             </Text>
-            <Image source={{uri: request.userImage}} style={styles.avatar} />
+            <Image source={ImagePath.Profile} style={styles.avatar} />
             <View style={styles.starContainer}>
               {[...Array(5)].map((_, index) => (
                 <TouchableOpacity

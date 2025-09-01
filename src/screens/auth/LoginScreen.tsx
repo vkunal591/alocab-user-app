@@ -19,8 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Controller, useForm } from 'react-hook-form';
 import ImagePath from '../../constants/ImagePath';
-import apiUtils from '../../utils/apiUtils';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
 import {
   LINE_HEIGHT,
   SPACING,
@@ -33,6 +32,8 @@ import {
   BREAKPOINT,
   Z_INDEX,
 } from '../../../assets/theam/theam';
+import { useAuth } from '../../context/authcontext';
+import PhoneInput from 'react-native-phone-number-input';
 
 const { width, height } = Dimensions.get('screen');
 const scaleFont = (size: number) => Math.round(size * Math.min(width / 375, 1.5));
@@ -51,10 +52,12 @@ interface OtpResponse {
 }
 
 const LoginScreen = () => {
+  const { sendOtp }: any = useAuth()
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(false);
   const { control, handleSubmit, formState: { errors } } = useForm<LoginFormData>();
   const scrollViewRef = useRef<ScrollView>(null);
+  const phoneInputRef = useRef<any>(null);
 
   // Animation states
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -77,15 +80,6 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    // AsyncStorage.getItem('userToken').then((token) => {
-    //   if (token) {
-    //     // User is authenticated, navigate to HomeScreen
-    //     navigation.replace('HomeScreen');
-    //   } else {
-    //     // User is not authenticated, stay on LoginScreen
-    //     console.log('No user token found, staying on LoginScreen');
-    //   }
-    // });
   }, [navigation, logoOpacity, formTranslateY]);
 
   const showToastOrAlert = (message: string) => {
@@ -96,26 +90,31 @@ const LoginScreen = () => {
     }
   };
 
-  const onSubmit = async (data: LoginFormData) => {
-    setLoading(true);
+  const onSubmit = async (data: any) => {
     try {
-      // API call to send OTP
-      const response: any = await apiUtils.post<OtpResponse>('/api/passenger/otp', {
-        phoneNumber: data.phone,
-      });
-      console.log('API Response:', response);
-      if (response.success) {
-        // Store the user in AsyncStorage
-        showToastOrAlert(response.message || 'OTP sent successfully!');
-        navigation.navigate('OtpScreen', { phone: data.phone, otp: response?.otp });
+      setLoading(true);
+      const fullPhoneNumber = data.phone;
+      if (!phoneInputRef.current?.isValidNumber(fullPhoneNumber)) {
+        Alert.alert('Invalid number', 'Please enter a valid phone number.');
+        return;
+      }
+      const confirmation: any = await auth().signInWithPhoneNumber(fullPhoneNumber);
+      // console.log(confirmation, confirmation?._auth?._user?._user?.uid)
+      // const uid = confirmation?._auth?._user?._user?.uid;
+      if (confirmation) {
+        showToastOrAlert('Otp Sented successful.');
+        navigation.navigate('OtpScreen', { phone: data.phone, confirmation }); // ✅ Optional: redirect to OTP screen
+      } else {
+        showToastOrAlert('Registration failed. Please try again.');
       }
     } catch (error: any) {
-      console.error('Login Error:', error);
-      showToastOrAlert(error.message || 'Failed to send OTP. Please try again.');
+      console.error('Registration/OTP Error:', error);
+      showToastOrAlert(error.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleButtonPress = () => {
     Animated.sequence([
@@ -172,42 +171,30 @@ const LoginScreen = () => {
             <Text style={styles.subtitle}>Enter your details</Text>
 
             <View style={styles.form}>
-              {/* Phone Input */}
+              {/* Phone Input with Country Picker */}
               <Controller
                 control={control}
-                rules={{
-                  required: 'Phone number is required',
-                  pattern: {
-                    value: /^\d{10}$/, // Only digits, exactly 10
-                    message: 'Phone number must be exactly 10 digits',
-                  },
-                }}
-                render={({ field: { onChange, onBlur, value } }) => (
+                name="phone"
+                rules={{ required: 'Phone number is required' }}
+                render={({ field: { value, onChange } }) => (
                   <View style={styles.inputWrapper}>
-                    <Image source={ImagePath?.phone} style={styles.inputIcon} />
-                    <View style={styles.line} />
-                    <TextInput
-                      style={[styles.input, errors.phone && styles.inputError]}
-                      placeholder="Enter your phone number"
-                      placeholderTextColor={THEAMCOLOR.SecondaryGray}
-                      value={value}
-                      onBlur={onBlur}
-                      onChangeText={(text) => {
-                        // Allow only digits
-                        const filteredText = text.replace(/[^0-9]/g, '');
-                        onChange(filteredText);
-                      }}
-                      keyboardType="number-pad"
-                      onFocus={(e) => scrollToInput(e.nativeEvent.target)}
-                      returnKeyType="done"
-                      onSubmitEditing={handleButtonPress}
-                      maxLength={10} // prevent typing more than 10 digits
+                    <PhoneInput
+                      ref={phoneInputRef}
+                      defaultValue={value}
+                      defaultCode="IN"
+                      layout="second"
+                      onChangeFormattedText={(text) => onChange(text)}
+                      withShadow
+                      disableArrowIcon={true}
+                      autoFocus={false}
+                      containerStyle={{ flex: 1, backgroundColor: THEAMCOLOR.SecondarySmokeWhite }}
+                      textContainerStyle={{ paddingVertical: 0, backgroundColor: THEAMCOLOR.SecondarySmokeWhite }}
+                      countryPickerButtonStyle={{ paddingVertical: 10, backgroundColor: THEAMCOLOR.SecondarySmokeWhite, borderRightColor: THEAMCOLOR.BorderGray, borderRightWidth: 1, width: 50, paddingLeft: 5 }}
                     />
                   </View>
                 )}
-                name="phone"
               />
-              {errors.phone && <Text style={styles.errorText}>{String(errors.phone.message)}</Text>}
+              {errors.phone && <Text style={styles.errorText}>{errors.phone.message}</Text>}
 
               {/* Social Login */}
               <Text style={styles.orLogin}>Or login with</Text>
@@ -326,6 +313,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     marginBottom: SPACING.md,
     backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+    overflow: "hidden"
   },
   input: {
     height: 50,

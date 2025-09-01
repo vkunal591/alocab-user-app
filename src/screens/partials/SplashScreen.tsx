@@ -8,8 +8,10 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ImagePath from '../../constants/ImagePath';
 import apiUtils from '../../utils/apiUtils';
+import { useAuth } from '../../context/authcontext';
 
 const SplashScreen = ({ navigation }: any) => {
+  const { getCurrentUser }: any = useAuth()
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -17,7 +19,7 @@ const SplashScreen = ({ navigation }: any) => {
 
   const fetchCurrentUser = async (): Promise<boolean> => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
+      const token = await AsyncStorage.getItem('authToken');
       console.log('User Token:', token);
       if (token) {
         const response: any = await apiUtils.get('/api/passenger/current');
@@ -72,10 +74,14 @@ const SplashScreen = ({ navigation }: any) => {
     const timer = setTimeout(async () => {
       try {
         const isIntroViewed = await AsyncStorage.getItem('isIntroViewed');
-        console.log('isIntroViewed:', isIntroViewed);
-
+        const token = await AsyncStorage.getItem('authToken');
+        console.log(token,isIntroViewed)
         if (isIntroViewed === 'true') {
-          const isLoggedIn = await fetchCurrentUser();
+          console.log(token)
+          let isLoggedIn
+          if (token) {
+            isLoggedIn = await getCurrentUser(token);
+          }
           if (isLoggedIn) {
             navigation.replace('HomeScreen');
           } else {
@@ -99,24 +105,24 @@ const SplashScreen = ({ navigation }: any) => {
         source={ImagePath.alocabLogo}
         style={[
           styles.logo,
-          {
-            opacity: opacityAnim,
-            transform: [
-              { scale: scaleAnim },
-              {
-                rotate: rotateAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0deg', '360deg'],
-                }),
-              },
-              {
-                translateY: bounceAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, -20],
-                }),
-              },
-            ],
-          },
+          // {
+          //   opacity: opacityAnim,
+          //   transform: [
+          //     { scale: scaleAnim },
+          //     {
+          //       rotate: rotateAnim.interpolate({
+          //         inputRange: [0, 1],
+          //         outputRange: ['0deg', '360deg'],
+          //       }),
+          //     },
+          //     {
+          //       translateY: bounceAnim.interpolate({
+          //         inputRange: [0, 1],
+          //         outputRange: [0, -20],
+          //       }),
+          //     },
+          //   ],
+          // },
         ]}
       />
     </View>
