@@ -97,11 +97,11 @@ const RidesScreen = () => {
                 </View>
                 <View>
                   <Text style={styles.fareLabel}>Total Fare</Text>
-                  <Text style={styles.fareValue}>{ride.totalFare}</Text>
+                  <Text style={styles.fareValue}>{Number(ride.totalFare)?.toFixed(2)}</Text>
                 </View>
                 <View>
                   <Text style={styles.fareLabel}>Earning</Text>
-                  <Text style={styles.fareValue}>{ride.earnings}</Text>
+                  <Text style={styles.fareValue}>{Number(ride.earnings)?.toFixed(2)}</Text>
                 </View>
               </View>
               <View style={styles.pathRow}>

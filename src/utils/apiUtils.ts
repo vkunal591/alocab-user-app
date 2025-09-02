@@ -7,7 +7,7 @@ interface ApiError {
     status?: number;
 }
 
-export const API_BASE_URL = process.env.API_BASE_URL || 'https://api-alocab.wayone.site';
+export const API_BASE_URL =  'https://api-alocab.wayone.site';
 const API_TIMEOUT = process.env.API_TIMEOUT || '10000';
 
 // Base configuration for Axios

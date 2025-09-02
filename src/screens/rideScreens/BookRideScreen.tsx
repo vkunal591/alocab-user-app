@@ -22,11 +22,9 @@ import BackButton from '../../Components/common/BackButton';
 
 const { width, height } = Dimensions.get('screen');
 
-
-
 export interface Coordinates {
-    [0]: number; // latitude
-    [1]: number; // longitude
+    [0]: number;
+    [1]: number;
 }
 interface Location {
     address: string;
@@ -111,25 +109,42 @@ export enum RideStatus {
     ACCEPTED = 'accepted',
     REQUESTED = 'requested',
     COMPLETED = 'completed',
-    CANCELLED = 'cancelled'
+    CANCELLED = 'cancelled',
 }
 
-
 export const rideStatusColors: Record<RideStatus, string> = {
-    [RideStatus.ONGOING]: '#FFE58F',     // Light Yellow
-    [RideStatus.REJECTED]: '#FF4D4F',    // Red
-    [RideStatus.ACCEPTED]: '#91D5FF',    // Blue
-    [RideStatus.REQUESTED]: '#D3ADF7',   // Purple
-    [RideStatus.COMPLETED]: '#52C41A',   // Green
-    [RideStatus.CANCELLED]: '#BFBFBF'    // Gray
+    [RideStatus.ONGOING]: '#FFE58F',
+    [RideStatus.REJECTED]: '#FF4D4F',
+    [RideStatus.ACCEPTED]: '#91D5FF',
+    [RideStatus.REQUESTED]: '#D3ADF7',
+    [RideStatus.COMPLETED]: '#52C41A',
+    [RideStatus.CANCELLED]: '#BFBFBF',
 };
 
 export const fetchRideDetails = async (setRideDetails: any) => {
     try {
-        const response: any = await apiUtils.get('/api/ride/detail');
+        const response: any = await apiUtils.get('/api/ride/active/ride');
+        console.log(response)
         if (response?.success) {
-            setRideDetails(response.ride);
-            return response?.ride?.status;
+            setRideDetails(response.data);
+            return response?.data?.status;
+        } else {
+            ToastAndroid.show(response?.message || 'Failed to fetch ride', ToastAndroid.SHORT);
+            return null;
+        }
+    } catch (error: any) {
+        ToastAndroid.show(error.message || 'Error fetching ride', ToastAndroid.LONG);
+        return null;
+    }
+};
+
+const fetchRideDetailData = async (setRideDetails: any) => {
+    try {
+        const response: any = await apiUtils.get('/api/ride/active/ride');
+        console.log(response)
+        if (response?.success) {
+            setRideDetails(response.data);
+            return response?.data;
         } else {
             ToastAndroid.show(response?.message || 'Failed to fetch ride', ToastAndroid.SHORT);
             return null;
@@ -149,15 +164,14 @@ const BookRideScreen = () => {
     const dropLocation = route.params?.dropLocation;
     const vehicleTypeParam = route.params?.vehicleType;
     const paymentMethodParam = route.params?.paymentMethod;
-
+    console.log(ride)
     const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
     const [selectedReason, setSelectedReason] = useState<string>('');
     const [isReasonModalVisible, setIsReasonModalVisible] = useState(false);
     const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
 
     const isRideCancellable =
-        rideDetails?.status === RideStatus.REQUESTED ||
-        rideDetails?.status === RideStatus.ACCEPTED;
+        rideDetails?.status === RideStatus.REQUESTED || rideDetails?.status === RideStatus.ACCEPTED;
 
     const cancelReasons = [
         { id: '1', label: 'Driver not available' },
@@ -165,8 +179,6 @@ const BookRideScreen = () => {
         { id: '3', label: 'Plans changed unexpectedly' },
         { id: '4', label: 'Other' },
     ];
-
-
 
     useEffect(() => {
         if (pickupLocation && dropLocation && vehicleTypeParam && paymentMethodParam) {
@@ -188,7 +200,7 @@ const BookRideScreen = () => {
                 __v: 0,
                 distance: ride?.distance ?? 'NA',
                 driver: {} as any,
-                fare: ride?.fare ?? 0,
+                fare: ride?.fare?.toFixed(2) ?? 0,
                 startedAt: '',
             };
             setRideDetails(dynamicRide);
@@ -224,10 +236,7 @@ const BookRideScreen = () => {
                 reason: selectedReason,
             };
 
-            const response: any = await apiUtils.post(
-                `/api/ride/cancel/${rideDetails._id}`,
-                payload
-            );
+            const response: any = await apiUtils.post(`/api/ride/cancel/${rideDetails._id}`, payload);
 
             if (response?.success) {
                 ToastAndroid.show('Ride cancelled', ToastAndroid.SHORT);
@@ -236,7 +245,7 @@ const BookRideScreen = () => {
                 ToastAndroid.show(response?.message || 'Cancel failed', ToastAndroid.SHORT);
             }
         } catch (error: any) {
-            console.log(error)
+            console.log(error);
             ToastAndroid.show(error.message || 'Error cancelling', ToastAndroid.LONG);
         } finally {
             setIsConfirmModalVisible(false);
@@ -273,31 +282,41 @@ const BookRideScreen = () => {
                 <TouchableOpacity style={styles.rideOption}>
                     <Image source={ImagePath.auto} style={styles.rideIcon} />
                     <View style={styles.rideDetails}>
-                        <Text style={styles.rideType}>
-                            {rideDetails?.vehicleType?.toUpperCase()}
-                        </Text>
+                        <Text style={styles.rideType}>{rideDetails?.vehicleType?.toUpperCase()}</Text>
                         <Text
                             style={[
                                 styles.rideInfo,
                                 { backgroundColor: rideStatusColors[rideDetails?.status || RideStatus.REQUESTED] },
                             ]}
                         >
-                            {rideDetails?.status?.charAt(0).toUpperCase() + rideDetails?.status?.slice(1)}
+                            {rideDetails?.status?.charAt(0)?.toUpperCase() + rideDetails?.status?.slice(1)}
                         </Text>
                     </View>
                     <View>
-                        <Text style={styles.ridePrice}>₹ {rideDetails?.fare || 'NA'}</Text>
+                        <Text style={styles.ridePrice}>₹ {Number(rideDetails?.fare)?.toFixed(2) || 'NA'}</Text>
                         <Text style={styles.ridePrice}>
-                            {rideDetails?.paymentMode?.charAt(0).toUpperCase() +
-                                rideDetails?.paymentMode?.slice(1)}
+                            {rideDetails?.paymentMode?.charAt(0)?.toUpperCase() + rideDetails?.paymentMode?.slice(1)}
                         </Text>
                     </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.pathRow} onPress={async () => {
-                    const status = fetchRideDetails(setRideDetails);
-                    RideStatus?.ACCEPTED === await status ? navigation.navigate('DriverApprochScreen', { ride }) : (RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen', { ride }) : ToastAndroid.show('Ride is not accepted, Please wait for the driver to accept the ride', ToastAndroid.SHORT));
-                }}>
+                <TouchableOpacity
+                    style={styles.pathRow}
+                    onPress={async () => {
+                        const data = await fetchRideDetailData(setRideDetails);
+                        const status = data?.status;
+                        if (status === RideStatus.ACCEPTED) {
+                            navigation.navigate('DriverApprochScreen', { ride: data });
+                        } else if (status === RideStatus.ONGOING) {
+                            navigation.navigate('InRideScreen', { ride: data });
+                        } else {
+                            ToastAndroid.show(
+                                'Ride is not accepted, Please wait for the driver to accept the ride',
+                                ToastAndroid.SHORT
+                            );
+                        }
+                    }}
+                >
                     <View style={styles.iconColumn}>
                         <View style={styles.greenCircle} />
                         <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.verticalLine} />
@@ -312,39 +331,41 @@ const BookRideScreen = () => {
                         </Text>
                     </View>
                 </TouchableOpacity>
-                
 
-                {/* Cancel Button */}
-                <TouchableOpacity
-                    style={[styles.bookButton, !isRideCancellable && { opacity: 0.5 }]}
-                    onPress={handleCancelInitiate}
-                    disabled={!isRideCancellable}
-                >
-                    <Text style={styles.bookButtonText}>Cancel Ride</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+
+                    <TouchableOpacity
+                        style={[styles.bookButton]}
+                        onPress={async () => {
+                            const data = await fetchRideDetailData(setRideDetails);
+                            const status = data?.status;
+                            if (status === RideStatus.ACCEPTED) {
+                                navigation.navigate('DriverApprochScreen', { ride: data });
+                            } else if (status === RideStatus.ONGOING) {
+                                navigation.navigate('InRideScreen', { ride: data });
+                            } else {
+                                ToastAndroid.show(
+                                    'Ride is not accepted, Please wait for the driver to accept the ride',
+                                    ToastAndroid.SHORT
+                                );
+                            }
+                        }}                    >
+                        <Text style={styles.bookButtonText}>Continue Ride</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.bookButton, { backgroundColor: THEAMCOLOR.PrimaryRed }, !isRideCancellable && { opacity: 0.5 }]}
+                        onPress={handleCancelInitiate}
+                        disabled={!isRideCancellable}
+                    >
+                        <Text style={styles.bookButtonText}>Cancel Ride</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            {/* ✅ Bottom Slider-like Button */}
-            <View style={{ position: 'absolute', bottom: 10, left: 20, right: 20,display:'none' }}>
-                <TouchableOpacity
-                    style={styles.sliderButton}
-                    onPress={() => {
-                        ToastAndroid.show('Ride Confirmed!', ToastAndroid.SHORT);
-                        navigation.navigate('DriverApprochScreen'); // or next screen
-                    }}
-                >
-                    <Text style={styles.bookButtonText}>Slide to Confirm Ride</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Reason Modal */}
             <Modal animationType="slide" transparent visible={isReasonModalVisible}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setIsReasonModalVisible(false)}
-                        >
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setIsReasonModalVisible(false)}>
                             <Ionicons name="close" size={24} color="#333" />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Select Cancellation Reason</Text>
@@ -364,14 +385,10 @@ const BookRideScreen = () => {
                 </View>
             </Modal>
 
-            {/* Confirm Modal */}
             <Modal animationType="slide" transparent visible={isConfirmModalVisible}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setIsConfirmModalVisible(false)}
-                        >
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setIsConfirmModalVisible(false)}>
                             <Ionicons name="close" size={24} color="#333" />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Confirm Cancellation</Text>
@@ -399,7 +416,6 @@ const BookRideScreen = () => {
 
 export default BookRideScreen;
 
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -411,36 +427,66 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        zIndex: -1,
+        zIndex: 0,
     },
     spacer: {
-        height: height * 0.55,
-        backgroundColor: 'transparent',
+        height: height * 0.45,
     },
     bottomContainer: {
-        height: height * 0.55,
+        position: 'absolute',
+        bottom: 0,
+        width,
         backgroundColor: '#fff',
-        paddingTop: 10,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    rideOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    rideIcon: {
+        width: 40,
+        height: 40,
+        resizeMode: 'contain',
+    },
+    rideDetails: {
+        flex: 1,
+        marginHorizontal: 10,
+    },
+    rideType: {
+        fontFamily: THEAMFONTFAMILY.PoppinsBold,
+        fontSize: 18,
+    },
+    rideInfo: {
+        marginTop: 4,
+        paddingVertical: 3,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        color: '#fff',
+        alignSelf: 'flex-start',
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        fontSize: 12,
+        overflow: 'hidden',
+    },
+    ridePrice: {
+        fontFamily: THEAMFONTFAMILY.PoppinsMedium,
+        fontSize: 14,
+        textAlign: 'right',
     },
     pathRow: {
         flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 1)',
-        borderRadius: 15,
-        padding: 15,
-        paddingRight: 40,
-        marginHorizontal: 15,
-        marginBottom: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 5,
-        elevation: 3,
-        overflow: 'hidden'
+        marginTop: 15,
     },
     iconColumn: {
+        width: 20,
         alignItems: 'center',
         marginRight: 10,
     },
@@ -449,200 +495,115 @@ const styles = StyleSheet.create({
         height: 12,
         borderRadius: 6,
         backgroundColor: 'green',
+        marginBottom: 3,
+    },
+    verticalLine: {
+        width: 2,
+        flex: 1,
     },
     redCircle: {
         width: 12,
         height: 12,
         borderRadius: 6,
         backgroundColor: 'red',
-    },
-    verticalLine: {
-        width: 2,
-        height: 30,
-        marginVertical: 2,
+        marginTop: 3,
     },
     textColumn: {
-        justifyContent: 'space-between',
-        height: 60,
-        overflow: "hidden"
-    },
-    location: {
-        fontSize: 12,
-        color: '#333',
-        marginVertical: 2,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    },
-    optionsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginHorizontal: 15,
-        marginBottom: 15,
-    },
-    distanceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    optionIcon: {
-        width: 15,
-        height: 15,
-        resizeMode: 'contain',
-    },
-    optionText: {
-        fontSize: 13,
-        color: '#000',
-        marginHorizontal: 5,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    rideOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        padding: 10,
-        marginHorizontal: 5,
-        marginBottom: 10,
-        borderRadius: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 5,
-    },
-    rideIcon: {
-        width: 40,
-        height: 40,
-        marginRight: 10,
-        resizeMode: 'contain',
-    },
-    rideDetails: {
         flex: 1,
     },
-    rideType: {
-        fontSize: 13,
-        fontWeight: '500',
+    location: {
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        fontSize: 14,
         color: '#333',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
-    },
-    rideInfo: {
-        fontSize: 11,
-        color: '#333',
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-        paddingHorizontal: 10,
-        paddingVertical: 1,
-        borderRadius: 12,
-        textAlign: 'center',
-        alignSelf: 'flex-start',
-        textTransform: 'none', // We're handling capitalization in code
-        marginTop: 5,
-    },
-
-
-    ridePrice: {
-        fontSize: 13,
-        fontWeight: '500',
-        color: THEAMCOLOR.PrimaryGreen,
-        fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+        marginBottom: 10,
     },
     bookButton: {
-        backgroundColor: THEAMCOLOR.PrimaryGreen,
-        paddingVertical: 13,
-        marginHorizontal: 15,
-        borderRadius: 10,
-        alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 3,
-    },
-    cancelButton: {
-        backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+        marginTop: 20,
+        backgroundColor: THEAMCOLOR?.PrimaryGreen,
+        borderRadius: 50,
         paddingVertical: 10,
-        marginHorizontal: 15,
-        borderRadius: 10,
         alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 3,
-    },
-    confirmButton: {
-        backgroundColor: THEAMCOLOR.PrimaryGreen,
-        paddingVertical: 10,
-        marginHorizontal: 15,
-        borderRadius: 10,
-        alignItems: 'center',
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
-        elevation: 3,
-    },
-    cancelButtonText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: THEAMCOLOR.SecondaryBlack,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        width: width * 0.4
     },
     bookButtonText: {
-        fontSize: 16,
-        fontWeight: 'bold',
         color: '#fff',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        fontFamily: THEAMFONTFAMILY.PoppinsMedium,
+        fontSize: 13,
+        fontWeight: '500'
+    },
+    sliderButton: {
+        backgroundColor: THEAMCOLOR?.PrimaryGreen,
+        borderRadius: 50,
+        paddingVertical: 15,
+        alignItems: 'center',
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: '#00000099',
         justifyContent: 'center',
-        alignItems: 'center',
+        paddingHorizontal: 20,
     },
     modalContent: {
-        width: width * 0.9,
         backgroundColor: '#fff',
-        borderRadius: 16,
+        borderRadius: 15,
         padding: 20,
     },
+    closeButton: {
+        alignSelf: 'flex-end',
+    },
     modalTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 15,
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        fontSize: 18,
+        marginBottom: 20,
+        color: '#000',
     },
     radioOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingVertical: 10,
+        borderBottomWidth: 0.5,
+        borderBottomColor: '#ccc',
+        justifyContent: 'space-between',
     },
     radioText: {
-        fontSize: 14,
+        fontFamily: THEAMFONTFAMILY.PoppinsRegular,
+        fontSize: 16,
         color: '#333',
-        fontFamily: THEAMFONTFAMILY.LatoRegular,
     },
     radioCircle: {
-        width: 20,
         height: 20,
+        width: 20,
         borderRadius: 10,
-        borderWidth: 1,
-        borderColor: THEAMCOLOR.PrimaryGreen,
+        borderWidth: 2,
+        borderColor: THEAMCOLOR?.PrimaryGreen,
         alignItems: 'center',
         justifyContent: 'center',
     },
     radioSelected: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: THEAMCOLOR.PrimaryGreen,
-    },
-    closeButton: {
-        position: 'absolute',
-        top: 15,
-        right: 15,
+        height: 10,
+        width: 10,
+        borderRadius: 5,
+        backgroundColor: THEAMCOLOR?.PrimaryGreen,
     },
     confirmButtonContainer: {
         flexDirection: 'row',
         marginTop: 20,
+    },
+    cancelButton: {
+        backgroundColor: '#ccc',
+        borderRadius: 50,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        fontFamily: THEAMFONTFAMILY.PoppinsMedium,
+        fontSize: 16,
+        color: '#333',
+    },
+    confirmButton: {
+        backgroundColor: THEAMCOLOR?.PrimaryGreen,
+        borderRadius: 50,
+        paddingVertical: 12,
+        alignItems: 'center',
     },
 });

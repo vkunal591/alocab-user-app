@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }: any) => {
     } catch (err: any) {
       console.error('OTP Verification Error:', err);
       ToastAndroid.show(err?.message || "Otp Verification Failed", ToastAndroid.SHORT)
-      logout()
+      // logout()
       return false;
     }
   };

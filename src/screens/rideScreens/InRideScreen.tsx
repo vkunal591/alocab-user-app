@@ -14,7 +14,7 @@ import {
     ActivityIndicator,
     Animated,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -71,6 +71,8 @@ interface RideDetails {
 
 const InRideScreen = () => {
     const navigation = useNavigation<any>();
+    const route = useRoute()
+    const ride = route.params?.ride
     const [rideDetails, setRideDetails] = useState<RideDetails | null>(null);
     const [reviewModalVisible, setReviewModalVisible] = useState(false);
     const [helpModalVisible, setHelpModalVisible] = useState(false);
@@ -80,7 +82,7 @@ const InRideScreen = () => {
     const slideAnim = useRef(new Animated.Value(height * 0.31)).current; // Start with card partially visible
     const fadeAnim = useRef(new Animated.Value(0)).current; // For content fade-in
     const [isCardOpen, setIsCardOpen] = useState(false);
-
+    console.log(ride)
     // Sample ride data from provided JSON
     const sampleRideData: RideDetails = {
         _id: '68b57480d64e9e9c9eefde78',
@@ -169,7 +171,7 @@ const InRideScreen = () => {
     useEffect(() => {
         // Simulate fetching data with sample data
         setTimeout(() => {
-            setRideDetails(sampleRideData);
+            setRideDetails(ride);
             setIsLoading(false);
             Animated.timing(fadeAnim, {
                 toValue: 1,
@@ -183,7 +185,7 @@ const InRideScreen = () => {
 
     // Handle action buttons
     const makeCall = () => {
-        ToastAndroid.show(`Calling ${rideDetails?.driver.name}...`, ToastAndroid.SHORT);
+        ToastAndroid.show(`Calling ${rideDetails?.driver?.name}...`, ToastAndroid.SHORT);
         // Implement actual call: Linking.openURL(`tel:${rideDetails?.driver.phoneNumber}`);
     };
 
@@ -257,10 +259,10 @@ const InRideScreen = () => {
                     latitude: rideDetails.drops[0].coordinates[0],
                     longitude: rideDetails.drops[0].coordinates[1],
                 }}
-                driverCoords={{
-                    latitude: rideDetails.driver.location.coordinates[0],
-                    longitude: rideDetails.driver.location.coordinates[1],
-                }}
+            // driverCoords={{
+            //     latitude: rideDetails.driver.location.coordinates[0],
+            //     longitude: rideDetails.driver.location.coordinates[1],
+            // }}
             />
 
             <Animated.View style={[styles.bottomCard, { transform: [{ translateY: slideAnim }] }]}>
@@ -288,7 +290,7 @@ const InRideScreen = () => {
                                     accessibilityLabel="Driver avatar"
                                 />
                                 <View style={styles.driverDetails}>
-                                    <Text style={styles.driverName}>{rideDetails.driver.name}</Text>
+                                    <Text style={styles.driverName}>{rideDetails?.driver?.name}</Text>
                                     <Text style={styles.driverRating}>
                                         {rideDetails.driver.rating > 0 ? `★ ${rideDetails.driver.rating.toFixed(1)}` : 'New Driver'}
                                     </Text>

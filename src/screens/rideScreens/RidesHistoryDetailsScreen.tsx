@@ -190,7 +190,7 @@ const RidesHistoryDetailsScreen = () => {
           </View>
           <View style={styles.totalAmountRow}>
             <Text style={styles.sectionTitle}>Total Amount</Text>
-            <Text style={[styles.sectionTitle, { color: THEAMCOLOR.PrimaryGreen }]}>₹ {rideDetails?.fare}</Text>
+            <Text style={[styles.sectionTitle, { color: THEAMCOLOR.PrimaryGreen }]}>₹ {Number(rideDetails?.fare)?.toFixed(2)}</Text>
           </View>
           <View style={styles.ridePath}>
             <View style={styles.pathRow}>
@@ -227,15 +227,15 @@ const RidesHistoryDetailsScreen = () => {
         <View style={[styles.rideDetailsContainer, { marginBottom: 40 }]}>
           <View style={styles.invoiceRow}>
             <Text style={styles.infoLabel}>Ride Charge</Text>
-            <Text style={styles.infoValue}>₹ {rideDetails.fare}</Text>
+            <Text style={styles.infoValue}>₹ {Number(rideDetails.fare)?.toFixed(2)}</Text>
           </View>
           <View style={styles.invoiceRow}>
             <Text style={styles.infoLabel}>Penalty Amount</Text>
-            <Text style={styles.infoValue}>₹ {rideDetails.penaltyAmount}</Text>
+            <Text style={styles.infoValue}>₹ {Number(rideDetails.penaltyAmount)?.toFixed(2)}</Text>
           </View>
           <View style={styles.invoiceRow}>
             <Text style={styles.infoLabel}>Total Amount</Text>
-            <Text style={styles.infoValue}>₹ {rideDetails.fare + rideDetails.penaltyAmount}</Text>
+            <Text style={styles.infoValue}>₹ {Number(rideDetails.fare + rideDetails.penaltyAmount)?.toFixed(2)}</Text>
           </View>
           <TouchableOpacity style={styles.downloadButton}>
             <Image source={ImagePath.down} style={styles.downloadIcon} />

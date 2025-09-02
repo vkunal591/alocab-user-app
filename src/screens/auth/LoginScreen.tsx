@@ -230,14 +230,14 @@ const LoginScreen = () => {
             </Animated.View>
 
             {/* Footer Text */}
-            <View style={styles.footerText}>
+            {/* <View style={styles.footerText}>
               <Text style={styles.accountText}>Don’t have an account?</Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate('RegisterScreen')}
               >
                 <Text style={styles.loginText}>Register</Text>
               </TouchableOpacity>
-            </View>
+            </View> */}
           </Animated.View>
         </View>
       </ScrollView>

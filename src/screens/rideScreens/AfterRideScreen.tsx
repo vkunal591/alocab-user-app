@@ -1,3 +1,4 @@
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Dimensions,
   Image,
@@ -10,7 +11,6 @@ import {
   Alert,
   ToastAndroid,
 } from 'react-native';
-import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -21,58 +21,32 @@ import {
   THEAMFONTFAMILY,
 } from '../../../assets/theam/theam';
 import BackButton from '../../Components/common/BackButton';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import apiUtils from '../../utils/apiUtils';
-import { RideDetails } from './BookRideScreen';
 import ImagePath from '../../constants/ImagePath';
 
 const { width, height } = Dimensions.get('screen');
 
-const AfterRideScreen = () => {
-  const route = useRoute();
-  const ride: any = route.params?.ride;
+type RideDetails = {
+  _id?: string;
+  driver?: {
+    name?: string;
+  };
+};
+
+type AfterRideRouteProp = RouteProp<{ AfterRide: { ride?: RideDetails } }, 'AfterRide'>;
+
+const AfterRideScreen: React.FC = () => {
+  const route = useRoute<AfterRideRouteProp>();
   const navigation = useNavigation<any>();
 
+  const ride = route.params?.ride ?? null;
+
+  const [fareDetails, setRideDetails] = useState<RideDetails | null>(ride);
   const [feedback, setFeedback] = useState('');
   const [rating, setRating] = useState(0);
-  const [selectedTags, setSelectedTags] = useState<any>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<any>(null);
-  const [rideDetails, setRideDetails] = useState<RideDetails | null>(ride ?? null);
-  const [request] = useState({
-    name: 'Nikhil',
-    userImage: 'https://i.pravatar.cc/150?img=8',
-  });
-
-  const fetchRideDetails = async () => {
-    try {
-      const response: any = await apiUtils.get('/api/ride/active/ride');
-      if (response?.success) {
-        setRideDetails(response.ride);
-        console.log('Ride details fetched:', response.ride);
-        return response?.ride?.status;
-      } else {
-        ToastAndroid.show(
-          response?.message || 'Failed to fetch ride details',
-          ToastAndroid.SHORT,
-        );
-        return null;
-      }
-    } catch (error: any) {
-      ToastAndroid.show(
-        error.message || 'Error fetching ride details',
-        ToastAndroid.LONG,
-      );
-      return null;
-    }
-  };
-
-  useEffect(() => {
-    const getRideDetails = async () => {
-      await fetchRideDetails();
-    };
-    getRideDetails();
-  }, []);
 
   const feedbackTags = [
     'Late Arrival',
@@ -83,67 +57,87 @@ const AfterRideScreen = () => {
     'Inappropriate Conduct',
   ];
 
-  const validateInput = () => {
-    if (rating === 0) {
-      setError('Please select a star rating');
+  // Safe fetch ride details
+  const fetchRideDetails = useCallback(async () => {
+    try {
+      const response: any = await apiUtils.get('/api/ride/active/ride');
+      if (response?.success && response?.ride) {
+        setRideDetails(response.ride);
+      } else {
+        const msg = response?.message ?? 'Failed to fetch ride details';
+        ToastAndroid.show(msg, ToastAndroid.SHORT);
+      }
+    } catch (err: any) {
+      ToastAndroid.show(err.message ?? 'Error fetching ride details', ToastAndroid.LONG);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRideDetails();
+  }, [fetchRideDetails]);
+
+  const validateInput = (): boolean => {
+    if (rating <= 0) {
+      Alert.alert('Validation', 'Please select a star rating.');
       return false;
     }
-    if (feedback.trim().length === 0) {
-      setError('Please provide feedback');
+    if (!feedback.trim()) {
+      Alert.alert('Validation', 'Please provide your feedback.');
       return false;
     }
     if (feedback.length > 500) {
-      setError('Feedback cannot exceed 500 characters');
+      Alert.alert('Validation', 'Feedback cannot exceed 500 characters.');
       return false;
     }
     return true;
   };
 
-  const handleTagPress = (tag: any) => {
-    setSelectedTags((prev: any) =>
-      prev.includes(tag) ? prev.filter((t: any) => t !== tag) : [...prev, tag],
+  const handleStarPress = (index: number) => {
+    if (isSubmitting) return;
+    setRating(index + 1);
+  };
+
+  const handleTagPress = (tag: string) => {
+    if (isSubmitting) return;
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
 
   const handleFeedbackSubmit = async () => {
-    if (!validateInput()) {
-      ToastAndroid.show(error, ToastAndroid.SHORT);
+    if (!validateInput()) return;
+
+    setIsSubmitting(true);
+
+    const rideId = fareDetails?._id;
+    if (!rideId) {
+      ToastAndroid.show('Ride ID is missing.', ToastAndroid.SHORT);
+      setIsSubmitting(false);
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
+    const requestPayload = {
+      rideId,
+      rating,
+      review: feedback.trim(),
+      tags: selectedTags,
+    };
 
     try {
-      const requestData = {
-        rideId: ride?._id,
-        rating,
-        review: feedback.trim(),
-        tags: selectedTags,
-      };
-      const response: any = await apiUtils.post('/api/review/', requestData);
-      if (response.success) {
-        ToastAndroid.show(
-          'Feedback submitted successfully',
-          ToastAndroid.SHORT,
-        );
+      const response: any = await apiUtils.post('/api/review/', requestPayload);
+      if (response?.success) {
+        ToastAndroid.show('Feedback submitted successfully!', ToastAndroid.SHORT);
         navigation.navigate('HomeScreen');
       } else {
-        throw new Error('Failed to submit feedback');
+        const msg = response?.message ?? 'Failed to submit feedback';
+        throw new Error(msg);
       }
     } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.');
-      ToastAndroid.show(err?.message, ToastAndroid.SHORT);
-      console.log('Error:', err);
-      ToastAndroid.show(err, ToastAndroid.SHORT);
+      ToastAndroid.show(err.message ?? 'Something went wrong', ToastAndroid.SHORT);
+      console.error('Feedback submission error:', err);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleStarPress = (starIndex: any) => {
-    setRating(starIndex + 1);
-    setError(null);
   };
 
   return (
@@ -152,61 +146,57 @@ const AfterRideScreen = () => {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+      >
         <MapView
           style={styles.map}
           initialRegion={{
             latitude: 28.6139,
-            longitude: 77.209,
+            longitude: 77.2090,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
           }}
-          scrollEnabled
-          zoomEnabled
-          pitchEnabled
-          rotateEnabled>
-          <Marker
-            coordinate={{ latitude: 28.6139, longitude: 77.209 }}
-            title="Your Location"
-          />
+        >
+          <Marker coordinate={{ latitude: 28.6139, longitude: 77.2090 }} title="Your Location" />
         </MapView>
+
         <View style={styles.card}>
           <View style={styles.profileRow}>
             <Text style={styles.name}>
-              Rate Driver: {rideDetails?.driver?.name}
+              Rate Driver: {fareDetails?.driver?.name ?? 'Unknown'}
             </Text>
             <Image source={ImagePath.Profile} style={styles.avatar} />
+
             <View style={styles.starContainer}>
-              {[...Array(5)].map((_, index) => (
+              {Array.from({ length: 5 }).map((_, idx) => (
                 <TouchableOpacity
-                  key={index}
-                  onPress={() => handleStarPress(index)}
-                  disabled={isSubmitting}>
+                  key={idx}
+                  onPress={() => handleStarPress(idx)}
+                  disabled={isSubmitting}
+                >
                   <Icon
-                    name={index < rating ? 'star' : 'star-border'}
+                    name={idx < rating ? 'star' : 'star-border'}
                     size={28}
                     color="#FFB700"
                   />
                 </TouchableOpacity>
               ))}
             </View>
+
             <TextInput
-              style={[styles.feedbackInput, error && styles.inputError]}
-              placeholder="Write your feedback here (max 500 characters)..."
+              style={styles.feedbackInput}
+              placeholder="Write your feedback here (max 500 chars)..."
               value={feedback}
               onChangeText={text => {
                 setFeedback(text);
-                setError(null);
               }}
               multiline
-              numberOfLines={8}
               maxLength={500}
               editable={!isSubmitting}
             />
-            <Text style={styles.charCount}>
-              {feedback.length}/500 characters
-            </Text>
+            <Text style={styles.charCount}>{feedback.length}/500</Text>
           </View>
+
           <View style={styles.withdrawSection}>
             <Text style={styles.name2}>Feedback Tags</Text>
             <View style={styles.amountButtons}>
@@ -218,27 +208,31 @@ const AfterRideScreen = () => {
                     selectedTags.includes(tag) && styles.selectedTag,
                   ]}
                   onPress={() => handleTagPress(tag)}
-                  disabled={isSubmitting}>
+                  disabled={isSubmitting}
+                >
                   <Text
                     style={[
                       styles.amountButtonText,
                       selectedTags.includes(tag) && styles.selectedTagText,
-                    ]}>
+                    ]}
+                  >
                     {tag}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
+
           <TouchableOpacity
             style={[
               styles.confirmButton,
               isSubmitting && styles.disabledButton,
             ]}
             onPress={handleFeedbackSubmit}
-            disabled={isSubmitting}>
+            disabled={isSubmitting}
+          >
             <Text style={styles.cancelButtonText}>
-              {isSubmitting ? 'Submitting...' : 'Done'}
+              {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -252,37 +246,31 @@ export default AfterRideScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEAMCOLOR?.SecondarySmokeWhite,
+    backgroundColor: THEAMCOLOR?.SecondarySmokeWhite ?? '#f5f5f5',
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  map: {
-    width,
-    height: height * 0.4,
-  },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  map: { width, height: height * 0.4 },
   card: {
     marginTop: -10,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderColor: '#fafafa',
-    backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
+    backgroundColor: THEAMCOLOR?.SecondarySmokeWhite ?? '#fff',
     paddingBottom: 20,
   },
-  profileRow: {
-    alignItems: 'center',
-    padding: 15,
+  profileRow: { alignItems: 'center', padding: 15 },
+  name: {
+    fontWeight: '400',
+    textAlign: 'center',
+    width: '100%',
+    marginBottom: 5,
+    fontSize: TEXT_SIZE?.bodyLarge ?? 18,
+    lineHeight: LINE_HEIGHT?.bodyLarge ?? 24,
+    fontFamily: THEAMFONTFAMILY?.LatoRegular ?? 'System',
   },
-  avatar: {
-    width: 85,
-    height: 85,
-    borderRadius: 45,
-    marginVertical: 10,
-  },
+  avatar: { width: 85, height: 85, borderRadius: 45, marginVertical: 10 },
   starContainer: {
     flexDirection: 'row',
     marginTop: 5,
@@ -296,41 +284,23 @@ const styles = StyleSheet.create({
     padding: 10,
     textAlignVertical: 'top',
     marginBottom: 10,
-    height: 6 * 20,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-  },
-  inputError: {
-    borderColor: 'red',
+    height: 120,
+    fontSize: TEXT_SIZE?.small ?? 14,
+    lineHeight: LINE_HEIGHT?.small ?? 18,
+    fontFamily: THEAMFONTFAMILY?.NunitoSemiBold ?? 'System',
   },
   charCount: {
     alignSelf: 'flex-end',
-    fontSize: TEXT_SIZE.xSmall,
+    fontSize: TEXT_SIZE?.xSmall ?? 12,
     color: 'gray',
     marginBottom: 10,
-  },
-  errorText: {
-    color: 'red',
-    textAlign: 'center',
-    marginVertical: 10,
-    fontSize: TEXT_SIZE.small,
-  },
-  name: {
-    fontWeight: '400',
-    textAlign: 'center',
-    width,
-    marginBottom: 5,
-    fontSize: TEXT_SIZE.bodyLarge,
-    lineHeight: LINE_HEIGHT.bodyLarge,
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
   },
   name2: {
     fontWeight: '400',
     marginBottom: 5,
-    fontSize: TEXT_SIZE.bodyLarge,
-    lineHeight: LINE_HEIGHT.bodyLarge,
-    fontFamily: THEAMFONTFAMILY.LatoRegular,
+    fontSize: TEXT_SIZE?.bodyLarge ?? 18,
+    lineHeight: LINE_HEIGHT?.bodyLarge ?? 24,
+    fontFamily: THEAMFONTFAMILY?.LatoRegular ?? 'System',
   },
   withdrawSection: {
     marginHorizontal: 15,
@@ -350,21 +320,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   selectedTag: {
-    backgroundColor: THEAMCOLOR.PrimaryGreen,
-    borderColor: THEAMCOLOR.PrimaryGreen,
-  },
-  selectedTagText: {
-    color: THEAMCOLOR.PureWhite,
+    backgroundColor: THEAMCOLOR?.PrimaryGreen ?? '#4caf50',
+    borderColor: THEAMCOLOR?.PrimaryGreen ?? '#4caf50',
   },
   amountButtonText: {
     fontWeight: '500',
-    color: THEAMCOLOR.PrimaryGreen,
-    fontSize: TEXT_SIZE.xSmall,
-    lineHeight: LINE_HEIGHT.xSmall,
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+    color: THEAMCOLOR?.PrimaryGreen ?? '#4caf50',
+    fontSize: TEXT_SIZE?.xSmall ?? 12,
+    lineHeight: LINE_HEIGHT?.xSmall ?? 16,
+    fontFamily: THEAMFONTFAMILY?.NunitoSemiBold ?? 'System',
+  },
+  selectedTagText: {
+    color: THEAMCOLOR?.PureWhite ?? '#fff',
   },
   confirmButton: {
-    backgroundColor: THEAMCOLOR?.PrimaryGreen,
+    backgroundColor: THEAMCOLOR?.PrimaryGreen ?? '#4caf50',
     paddingVertical: 12,
     borderRadius: 15,
     marginHorizontal: 15,
@@ -375,10 +345,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   cancelButtonText: {
-    fontSize: TEXT_SIZE.body,
-    lineHeight: LINE_HEIGHT.small,
-    fontFamily: THEAMFONTFAMILY.LatoBold,
-    color: THEAMCOLOR?.PureWhite,
+    fontSize: TEXT_SIZE?.body ?? 16,
+    lineHeight: LINE_HEIGHT?.small ?? 18,
+    fontFamily: THEAMFONTFAMILY?.LatoBold ?? 'System',
+    color: THEAMCOLOR?.PureWhite ?? '#fff',
     fontWeight: 'bold',
   },
 });

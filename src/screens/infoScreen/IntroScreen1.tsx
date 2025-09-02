@@ -23,6 +23,7 @@ import {
   SHADOW,
 } from '../../../assets/theam/theam';
 import { RootStackParamList } from '../../navigator/StackNavigator';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -85,11 +86,13 @@ const IntroScreen1: React.FC = () => {
 
   const handleSkip = async () => {
     navigation.navigate('RegisterScreen'); // Navigate to RegisterScreen or any other screen
+    await AsyncStorage.setItem('isIntroViewed', 'true');
     // Navigation is handled by StackNavigator based on AuthContext state
   };
 
   const handleContinue = async () => {
     navigation.navigate('IntroScreen2');
+    await AsyncStorage.setItem('isIntroViewed', 'true');
   };
 
   return (

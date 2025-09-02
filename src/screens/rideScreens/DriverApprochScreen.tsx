@@ -83,6 +83,7 @@ const DriverApproachScreen = () => {
         ]).start(() => setIsCardOpen(!isCardOpen));
     };
 
+    
     // Handle ride data loading
     useEffect(() => {
         if (ride) {
@@ -189,10 +190,10 @@ const DriverApproachScreen = () => {
                     latitude: rideDetails?.drops?.[0]?.coordinates?.[0] ?? 0,
                     longitude: rideDetails?.drops?.[0]?.coordinates?.[1] ?? 0,
                 }}
-                driverCoords={{
-                    latitude: rideDetails?.driver?.location?.coordinates?.[0] ?? 0,
-                    longitude: rideDetails?.driver?.location?.coordinates?.[1] ?? 0,
-                }}
+            // driverCoords={{
+            //     latitude: rideDetails?.driver?.location?.coordinates?.[0] ?? 0,
+            //     longitude: rideDetails?.driver?.location?.coordinates?.[1] ?? 0,
+            // }}
             />
 
             {/* Bottom Card */}
@@ -224,21 +225,21 @@ const DriverApproachScreen = () => {
                                     accessibilityLabel="Driver avatar"
                                 />
                                 <View style={styles.driverDetails}>
-                                    <Text style={styles.driverName}>{rideDetails.driver.name}</Text>
+                                    <Text style={styles.driverName}>{rideDetails?.driver?.name}</Text>
                                     <Text style={styles.driverRating}>
-                                        {rideDetails.driver.rating > 0
-                                            ? `★ ${rideDetails.driver.rating.toFixed(1)}`
+                                        {rideDetails?.driver?.rating > 0
+                                            ? `★ ${rideDetails?.driver?.rating.toFixed(1)}`
                                             : 'New Driver'}
                                     </Text>
                                     <Text numberOfLines={1} style={styles.vehicleText}>
-                                        {rideDetails.driver.vehicle.model} • {rideDetails.driver.vehicle.number}
+                                        {rideDetails?.driver?.vehicle?.model} • {rideDetails?.driver?.vehicle?.number}
                                     </Text>
                                 </View>
                                 <View style={styles.actions}>
                                     <TouchableOpacity style={styles.callBtn} onPress={makeCall}>
                                         <Ionicons size={20} name="call-outline" />
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={styles.msgBtn} onPress={() => navigation.navigate('ChatScreen')}>
+                                    <TouchableOpacity style={styles.msgBtn} onPress={() => navigation.navigate('ChatScreen',{ride:rideDetails})}>
                                         <MaterialCommunityIcons size={20} name="message-processing-outline" />
                                     </TouchableOpacity>
                                 </View>
@@ -248,7 +249,7 @@ const DriverApproachScreen = () => {
 
                         {/* Trip Status */}
                         <Text style={styles.etaText}>
-                            Driver is {rideDetails.eta} away • {rideDetails.distance} km
+                            Driver is {rideDetails?.eta} away • {rideDetails?.distance} km
                         </Text>
 
                         {/* Trip Details */}
@@ -257,21 +258,21 @@ const DriverApproachScreen = () => {
                                 <Ionicons name="location-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
                                 <View style={styles.detailTextContainer}>
                                     <Text style={styles.detailLabel}>Pickup</Text>
-                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails.pickup.address}</Text>
+                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails?.pickup?.address}</Text>
                                 </View>
                             </View>
                             <View style={styles.detailRow}>
                                 <Ionicons name="flag-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
                                 <View style={styles.detailTextContainer}>
                                     <Text style={styles.detailLabel}>Drop-off</Text>
-                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails.drops[0].address}</Text>
+                                    <Text numberOfLines={1} ellipsizeMode='tail' style={styles.detailText}>{rideDetails?.drops[0]?.address}</Text>
                                 </View>
                             </View>
                             <View style={styles.detailRow}>
                                 <Ionicons name="cash-outline" size={20} color={THEAMCOLOR.PrimaryGreen} />
                                 <View style={styles.detailTextContainer}>
-                                    <Text style={styles.detailLabel}>Fare ({rideDetails.paymentMode})</Text>
-                                    <Text style={styles.detailText}>₹{rideDetails.fare.toFixed(2)}</Text>
+                                    <Text style={styles.detailLabel}>Fare ({rideDetails?.paymentMode})</Text>
+                                    <Text style={styles.detailText}>₹{Number(rideDetails?.fare).toFixed(2)}</Text>
                                 </View>
                             </View>
                             <View style={styles.detailRow}>
@@ -279,7 +280,7 @@ const DriverApproachScreen = () => {
                                 <View style={styles.detailTextContainer}>
                                     <Text style={styles.detailLabel}>Distance & Duration</Text>
                                     <Text style={styles.detailText}>
-                                        {rideDetails.distance} km • {rideDetails.eta}
+                                        {rideDetails?.distance} km • {rideDetails?.eta}
                                     </Text>
                                 </View>
                             </View>
@@ -294,13 +295,13 @@ const DriverApproachScreen = () => {
                                 accessibilityLabel="Call driver"
                                 onPress={async () => {
                                     const status = await fetchRideDetails(setRideDetails);
-                                    RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen') : (RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen') : ToastAndroid.show('Ride is not started, Please wait for the driver to start the ride', ToastAndroid.SHORT));
+                                    RideStatus?.ONGOING === await status ? navigation.navigate('InRideScreen', { ride: rideDetails }) : (RideStatus?.COMPLETED === await status ? navigation.navigate('AfterRideScreen', { ride: rideDetails }) : ToastAndroid.show('Ride is not started, Please wait for the driver to start the ride', ToastAndroid.SHORT));
 
                                 }}>
                                 {/* <Ionicons name="call-outline" size={20} color="#fff" /> */}
-                                <Text style={styles.actionBtnText}>Confirm Arrival</Text>
+                                <Text style={styles.actionBtnText}>Continue Ride</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
+                            {/* <TouchableOpacity
                                 style={[styles.actionBtn, styles.cancelBtn]}
                                 onPress={handleCancelRide}
                                 activeOpacity={0.8}
@@ -308,7 +309,7 @@ const DriverApproachScreen = () => {
                             >
                                 <Ionicons name="close-outline" size={20} color="#fff" />
                                 <Text style={styles.actionBtnText}>Cancel Ride</Text>
-                            </TouchableOpacity>
+                            </TouchableOpacity> */}
                         </View>
                     </Animated.View>
                 </LinearGradient>

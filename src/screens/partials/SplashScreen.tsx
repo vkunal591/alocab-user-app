@@ -75,7 +75,7 @@ const SplashScreen = ({ navigation }: any) => {
       try {
         const isIntroViewed = await AsyncStorage.getItem('isIntroViewed');
         const token = await AsyncStorage.getItem('authToken');
-        console.log(token,isIntroViewed)
+        console.log(token, isIntroViewed)
         if (isIntroViewed === 'true') {
           console.log(token)
           let isLoggedIn

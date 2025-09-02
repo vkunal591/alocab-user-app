@@ -354,14 +354,14 @@ const OtpScreen = () => {
         </TouchableOpacity>
       </Animated.View>
 
-      <View style={styles.footerText}>
+      {/* <View style={styles.footerText}>
         <Text style={styles.accountText}>Don’t have an account?</Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('RegisterScreen')}
         >
           <Text style={styles.otpText}>Register</Text>
         </TouchableOpacity>
-      </View>
+      </View> */}
 
     </SafeAreaView >
   );

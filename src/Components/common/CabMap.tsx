@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import MapView, { Marker, AnimatedRegion, PROVIDER_GOOGLE } from 'react-native-maps';
 import {
   StyleSheet,
@@ -17,57 +17,74 @@ import Entypo from 'react-native-vector-icons/Entypo';
 import ImagePath from '../../constants/ImagePath';
 
 const { width, height } = Dimensions.get('window');
-const GOOGLE_MAPS_APIKEY = `${process.env.MAPS_API_KEY}`;
+const GOOGLE_MAPS_APIKEY = process.env.MAPS_API_KEY;
+
+interface Coordinate {
+  latitude: number;
+  longitude: number;
+}
 
 interface Props {
-  pickupCoords?: { latitude: number; longitude: number } | null;
-  dropCoords?: { latitude: number; longitude: number } | null;
+  pickupCoords?: Coordinate | null;
+  dropCoords?: Coordinate | null;
   rideActive?: boolean;
   isOnline?: boolean;
   rideStart?: boolean;
 }
 
 const CabMap: React.FC<Props> = ({
-  pickupCoords,
-  dropCoords,
+  pickupCoords = null,
+  dropCoords = null,
   rideActive = true,
   isOnline = false,
   rideStart = true,
 }) => {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapView | null>(null);
   const locationInterval = useRef<NodeJS.Timeout | null>(null);
+  // console.log(pickupCoords, dropCoords)
   const [rideMode, setRideMode] = useState(rideStart);
-  const [currentCoords, setCurrentCoords] = useState<{ latitude: number; longitude: number } | null>(pickupCoords ?? null);
-  const [driverMarker, setDriverMarker] = useState<AnimatedRegion | null | any>(null);
+  const [currentCoords, setCurrentCoords] = useState<Coordinate | null>(pickupCoords);
+  const [driverMarker, setDriverMarker] = useState<AnimatedRegion | null>(null);
   const [markerRotation, setMarkerRotation] = useState(0);
   const [distance, setDistance] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [newPickupCoords, setNewPickupCoords] = useState(dropCoords);
+  const [newPickupCoords, setNewPickupCoords] = useState<Coordinate | null>(dropCoords);
 
-  // Request location permission
-  const requestLocationPermission = async () => {
+  const showToast = (msg: string) => {
     if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-      );
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        fetchCurrentLocation();
-      } else {
-        ToastAndroid.show('Location permission denied', ToastAndroid.SHORT);
-      }
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
     } else {
-      fetchCurrentLocation();
+      console.warn(msg);
     }
   };
 
-  // Fetch current location of the user
-  const fetchCurrentLocation = () => {
+  const requestLocationPermission = useCallback(async () => {
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          fetchCurrentLocation();
+        } else {
+          showToast('Location permission denied');
+        }
+      } else {
+        fetchCurrentLocation();
+      }
+    } catch (err) {
+      console.error('Permission error:', err);
+      showToast('Failed to get location permission');
+    }
+  }, []);
+
+  const fetchCurrentLocation = useCallback(() => {
     Geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
         const newLocation = { latitude, longitude };
-        console.log(newLocation)
+
         if (!driverMarker) {
           const newRegion = new AnimatedRegion({
             latitude,
@@ -76,9 +93,8 @@ const CabMap: React.FC<Props> = ({
             longitudeDelta: rideMode ? 0.001 : 0.01,
           });
           setDriverMarker(newRegion);
-        }
-        else {
-          const rotation = calculateBearing(currentCoords, newLocation);
+        } else {
+          const rotation = currentCoords ? calculateBearing(currentCoords, newLocation) : 0;
           setMarkerRotation(rotation);
           setCurrentCoords(newLocation);
 
@@ -100,20 +116,16 @@ const CabMap: React.FC<Props> = ({
           },
           1000
         );
-
       },
       (error) => {
-        ToastAndroid.show(`Location error: ${error.message}`, ToastAndroid.SHORT);
+        console.error('Location Error:', error);
+        showToast(`Location error: ${error.message}`);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
-  };
+  }, [currentCoords, driverMarker, rideMode]);
 
-  // Calculate bearing angle between two coordinates
-  const calculateBearing = (
-    start: { latitude: number; longitude: number },
-    end: { latitude: number; longitude: number }
-  ) => {
+  const calculateBearing = (start: Coordinate, end: Coordinate) => {
     const lat1 = (start.latitude * Math.PI) / 180;
     const lon1 = (start.longitude * Math.PI) / 180;
     const lat2 = (end.latitude * Math.PI) / 180;
@@ -124,15 +136,20 @@ const CabMap: React.FC<Props> = ({
     const x =
       Math.cos(lat1) * Math.sin(lat2) -
       Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
     let brng = Math.atan2(y, x);
     brng = (brng * 180) / Math.PI;
     return (brng + 360) % 360;
   };
 
-  // Watch for location permission and location updates
   useEffect(() => {
     requestLocationPermission();
-  }, []);
+    return () => {
+      if (locationInterval.current) {
+        clearInterval(locationInterval.current);
+      }
+    };
+  }, [requestLocationPermission]);
 
   useEffect(() => {
     if (rideMode) {
@@ -144,15 +161,13 @@ const CabMap: React.FC<Props> = ({
         locationInterval.current = null;
       }
     }
-
     return () => {
       if (locationInterval.current) {
         clearInterval(locationInterval.current);
       }
     };
-  }, [rideMode]);
+  }, [rideMode, fetchCurrentLocation]);
 
-  // Handle zoom in/out
   const handleZoom = (zoomIn: boolean) => {
     if (!mapRef.current || !currentCoords) return;
 
@@ -166,14 +181,12 @@ const CabMap: React.FC<Props> = ({
     mapRef.current.animateToRegion(region, 500);
   };
 
-  // Handle the drag of the marker
   const handleDragEnd = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setNewPickupCoords({ latitude, longitude });
     setDragging(false);
   };
 
-  // Handle the marker drag start
   const handleDragStart = () => {
     setDragging(true);
   };
@@ -188,7 +201,6 @@ const CabMap: React.FC<Props> = ({
         followsUserLocation={rideStart}
         showsMyLocationButton={!rideStart}
       >
-        {/* Draggable Marker for Pickup */}
         {newPickupCoords && (
           <Marker
             coordinate={newPickupCoords}
@@ -199,7 +211,6 @@ const CabMap: React.FC<Props> = ({
           />
         )}
 
-        {/* Driver's Location Marker */}
         {rideStart && driverMarker && (
           <Marker.Animated
             coordinate={driverMarker}
@@ -210,8 +221,7 @@ const CabMap: React.FC<Props> = ({
           />
         )}
 
-        {/* Directions to Pickup */}
-        {currentCoords && newPickupCoords && (
+        {currentCoords && newPickupCoords && GOOGLE_MAPS_APIKEY && (
           <MapViewDirections
             origin={currentCoords}
             destination={newPickupCoords}
@@ -222,14 +232,14 @@ const CabMap: React.FC<Props> = ({
               setDistance(result?.distance ?? null);
               setDuration(result?.duration ?? null);
             }}
-            onError={() => {
-              ToastAndroid.show('Directions error', ToastAndroid.SHORT);
+            onError={(err) => {
+              console.error('Directions error:', err);
+              showToast('Directions error');
             }}
           />
         )}
       </MapView>
 
-      {/* Distance and Duration Information */}
       {rideActive && distance !== null && duration !== null && (
         <View style={styles.detailsContainer}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -243,7 +253,6 @@ const CabMap: React.FC<Props> = ({
         </View>
       )}
 
-      {/* Zoom Controls */}
       <View style={styles.zoomControls}>
         <TouchableOpacity onPress={() => handleZoom(true)} style={styles.zoomButton}>
           <Icon name="add" size={24} color="#000" />
@@ -256,8 +265,8 @@ const CabMap: React.FC<Props> = ({
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => {
-            setRideMode(prev => {
-              ToastAndroid.show("Ride mode " + (!prev ? "enabled" : "disabled"), ToastAndroid.SHORT);
+            setRideMode((prev) => {
+              showToast(`Ride mode ${!prev ? 'enabled' : 'disabled'}`);
               return !prev;
             });
           }}
@@ -265,7 +274,6 @@ const CabMap: React.FC<Props> = ({
         >
           <Entypo name="direction" size={22} color="#fff" />
         </TouchableOpacity>
-
       </View>
     </View>
   );
