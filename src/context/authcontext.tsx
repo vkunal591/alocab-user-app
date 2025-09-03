@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: any) => {
       setLoading(true);
       setError(null);
       setPhoneNumber(phone);
-    const response: any = await apiUtils.post('/api/passenger/otp', { phoneNumber: phone });
+      const response: any = await apiUtils.post('/api/passenger/otp', { phoneNumber: phone });
       console.log(response)
       setOtp(response?.otp)
       return true
@@ -195,6 +195,7 @@ export const AuthProvider = ({ children }: any) => {
         otp,
         setOtp,
         resendOtp,
+        setUser,
         verifyFirebaseApiOtp
       }}
     >

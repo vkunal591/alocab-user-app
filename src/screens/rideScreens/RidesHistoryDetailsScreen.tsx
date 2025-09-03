@@ -178,7 +178,7 @@ const RidesHistoryDetailsScreen = () => {
           </View>
           <View style={styles.ratingContainer}>
             <View style={styles.ratingRow}>
-              <Image source={{ uri: 'https://i.pravatar.cc/150?img=8' }} style={styles.driverImage} />
+              <Image source={ImagePath.Profile} style={styles.driverImage} />
               <View style={styles.profileContent}>
                 <Text style={styles.driverName}>{rideDetails?.driver?.name}</Text>
                 <View style={styles.starsContainer}>
@@ -205,9 +205,9 @@ const RidesHistoryDetailsScreen = () => {
               </View>
             </View>
           </View>
-          <View style={styles.mapPlaceholder}>
+          {/* <View style={styles.mapPlaceholder}>
             <Text style={styles.mapText}>[Map Placeholder]</Text>
-          </View>
+          </View> */}
           <View style={styles.metricsRow}>
             <View style={styles.metricContainer}>
               <Text style={styles.metricValue}>{rideDetails.distance} Km</Text>

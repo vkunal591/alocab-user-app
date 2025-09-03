@@ -1,220 +1,202 @@
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions, ScrollView, ToastAndroid } from 'react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
+  ScrollView,
+  RefreshControl,
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../../assets/theam/theam';
-import BackButton from '../../Components/common/BackButton';
 import apiUtils from '../../utils/apiUtils';
-import { RideDetails } from './BookRideScreen';
+import BackButton from '../../Components/common/BackButton';
+import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../../assets/theam/theam';
+
 
 const { width, height } = Dimensions.get('window');
 
-interface Location {
-  address: string;
-  coordinates: [number, number];
-}
-
-interface Ride {
-  pickup: Location;
-  _id: string;
-  user: string;
-  drops: Location[];
-  status: string;
-  isPinVerified: boolean;
-  pin: number;
-  vehicleType: string;
-  penaltyAmount: number;
-  paymentMode: string;
-  promoCode: string | null;
-  promoCodeDetails: any | null;
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
-  distance: string;
-  driver: string;
-  fare: number;
-  startedAt: string;
-  driverReachedAt: string;
-  completedAt: string;
-  duration: number;
-}
-
-
-
-
-export enum RideStatus {
-  ONGOING = 'ongoing',
-  REJECTED = 'rejected',
-  ACCEPTED = 'accepted',
-  REQUESTED = 'requested',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled'
-};
-
-
-export const rideStatusColors: any = {
-  [RideStatus.ONGOING]: '#FFE58F',     // Light Yellow
-  [RideStatus.REJECTED]: '#FF4D4F',    // Red
-  [RideStatus.ACCEPTED]: '#91D5FF',    // Blue
-  [RideStatus.REQUESTED]: '#D3ADF7',   // Purple
-  [RideStatus.COMPLETED]: '#52C41A',   // Green
-  [RideStatus.CANCELLED]: '#BFBFBF',   // Gray
-};
-
-
 const RidesScreen = () => {
   const navigation = useNavigation<any>();
-  const [selectedDate, setSelectedDate] = useState(new Date('2025-02-22'));
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [ridesDetails, setRidesDetails] = useState<Ride[]>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [endDate, setEndDate] = useState(new Date());
+  const [pickerMode, setPickerMode] = useState<'start' | 'end'>('start');
+  const [showPicker, setShowPicker] = useState(false);
+  const [rides, setRides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchRidesDetails = async () => {
+  const fetchRides = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      const response: any = await apiUtils.get('/api/ride/user');
-      console.log('Ride details fetched:', response.rides);
-      if (response?.success) {
-        setRidesDetails(response.rides);
-        return response?.rides?.[0]?.status;
-      } else {
-        ToastAndroid.show(response?.message || 'Failed to fetch ride details', ToastAndroid.SHORT);
-        return null;
-      }
-    } catch (error: any) {
-      ToastAndroid.show(error.message || 'Error fetching ride details', ToastAndroid.LONG);
-      return null;
-    }
-  };
+      const data: any = await apiUtils.get('/api/ride/user', {});
+      console.log(data)
+      if (!data?.success) throw new Error('Failed to fetch rides');
 
-  useEffect(() => {
-    const getRidesDetails = async () => {
-      await fetchRidesDetails();
-    };
-    getRidesDetails();
+      const formatted = data?.rides?.map((ride: any) => ({
+        ...ride,
+        formattedDate: new Date(ride.createdAt).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        statusText: ride.status.charAt(0).toUpperCase() + ride.status.slice(1),
+        totalFare: `₹${ride.fare.toFixed(2)}`,
+        earnings: `₹${(ride.fare).toFixed(2)}`,
+      }));
+
+      setRides(formatted);
+    } catch {
+      setError('An error occurred while fetching rides.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchRides();
+  }, [fetchRides]);
 
-  const rides = [
-    {
-      date: '16/02/2025, 08:59 PM',
-      status: 'Completed',
-      totalFare: '₹69',
-      earnings: '₹29',
-      pickup: 'C-50, Dal Mil Road, Uttam Nagar, NEW DELHI, 110022.',
-      dropoff: 'A2/32, DC, JANAKPURI, Uttam Nagar, NEW DELHI, 110059.',
-    },
-    {
-      date: '16/02/2025, 08:59 PM',
-      status: 'Cancelled',
-      totalFare: '₹0',
-      earnings: '₹0',
-      pickup: 'C-50, Dal Mil Road, Uttam Nagar, NEW DELHI, 110022.',
-      dropoff: 'A2/32, DC, JANAKPURI, Uttam Nagar, NEW DELHI, 110059.',
-    },
-  ];
+  const filteredRides = rides.filter((ride) => {
+    const rideDate = new Date(ride.createdAt);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).replace(/ /g, ' ');
+    const startOfDay = new Date(startDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    console.log(rideDate, startOfDay, endOfDay)
+    return rideDate >= startOfDay && rideDate <= endOfDay;
+  });
+
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchRides();
   };
 
-  const onDateChange = (event: any, newDate?: Date) => {
-    setShowDatePicker(false);
-    if (newDate) {
-      setSelectedDate(newDate);
-    }
+  const onChangeDate = (event: any, newDate?: Date) => {
+    setShowPicker(false);
+    if (!newDate) return;
+    pickerMode === 'start' ? setStartDate(newDate) : setEndDate(newDate);
   };
 
-  const handleDatePicker = () => {
-    setShowDatePicker(true);
+  const formatDateLabel = (date: Date) =>
+    date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const formatDuration = (durationInSeconds: number) => {
+    const minutes = Math.floor(durationInSeconds / 60);
+    const seconds = durationInSeconds % 60;
+    return `${minutes} min ${seconds} sec`;
   };
 
   return (
     <View style={styles.container}>
-      {/* Header with Back Arrow and Title */}
-      <View style={styles.headerContainer}>
+      {/* Header */}
+      <View style={styles.header}>
         <BackButton />
-        <Text style={styles.headerTitle}>My Rides</Text>
+        <Text style={styles.headerTitle}>Rides</Text>
       </View>
 
-      {/* Date Picker Section */}
-      <View style={styles.datePickerContainer}>
-        <View style={styles.datePickerInnerContainer}>
-          <TouchableOpacity onPress={handleDatePicker}>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDatePicker}>
-            <Ionicons name="calendar-outline" size={20} color={THEAMCOLOR.PrimaryGreen || '#4CAF50'} />
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={selectedDate}
-              mode="date"
-              display="default"
-              onChange={onDateChange}
-            />
-          )}
-        </View>
+      {/* Date Range Filter */}
+      <View style={styles.filterCard}>
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={() => { setPickerMode('start'); setShowPicker(true); }}
+        >
+          <Text style={styles.filterText}>From: {formatDateLabel(startDate)}</Text>
+        </TouchableOpacity>
+
+        <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.separator} />
+
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={() => { setPickerMode('end'); setShowPicker(true); }}
+        >
+          <Text style={styles.filterText}>To: {formatDateLabel(endDate)}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Rides List */}
-      <ScrollView style={styles.scrollView}>
-        {ridesDetails && ridesDetails.map((ride, index) => (
-          <TouchableOpacity key={index} onPress={() => navigation.navigate('RidesHistoryDetailsScreen', { rideId: ride?._id })}>
-            <View style={styles.rideContainer}>
-              <View style={styles.fareContainer}>
+      {showPicker && (
+        <DateTimePicker
+          value={pickerMode === 'start' ? startDate : endDate}
+          mode="date"
+          display="default"
+          onChange={onChangeDate}
+        />
+      )}
+
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[THEAMCOLOR.PrimaryGreen]}
+            tintColor={THEAMCOLOR.PrimaryGreen}
+          />
+        }
+      >
+        {loading ? (
+          <Text style={styles.messageText}>Loading rides...</Text>
+        ) : error ? (
+          <Text style={[styles.messageText, styles.errorText]}>{error}</Text>
+        ) : filteredRides.length === 0 ? (
+          <Text style={styles.messageText}>No rides in this date range.</Text>
+        ) : (
+          filteredRides.map((ride, idx) => (
+            <TouchableOpacity
+              key={ride._id || idx}
+              style={styles.rideCard}
+              onPress={() => navigation.navigate('RidesHistoryDetailsScreen', { rideId: ride?._id })}
+            >
+              <View style={styles.rowBetween}>
                 <View>
-                  <Text style={styles.rideDate}>
-                    {ride?.createdAt ? new Date(ride.createdAt).toLocaleString() : ''}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.status,
-                      { backgroundColor: rideStatusColors[ride?.status] }
-                    ]}
-                  >
-                    {ride.status?.charAt(0).toUpperCase() + ride?.status?.slice(1)}
-                  </Text>
+                  <Text style={styles.dateTextSmall}>{ride.formattedDate}</Text>
+                  <Text style={[
+                    styles.statusText,
+                    { color: ride.statusText === 'Completed' ? THEAMCOLOR.PrimaryGreen : '#D32F2F' }
+                  ]}>{ride.statusText}</Text>
                 </View>
-                <View>
-                  <Text style={styles.fareLabel}>Total Fare</Text>
-                  <Text style={styles.fareValue}>₹ {Number(ride?.fare)?.toFixed(2)}</Text>
+                <View style={styles.fareInfo}>
+                  <Text style={styles.label}>Fare</Text>
+                  <Text style={styles.value}>{ride.totalFare}</Text>
                 </View>
               </View>
-              <View style={styles.pathRow}>
-                <View style={styles.iconColumn}>
-                  <View style={styles.greenCircle} />
-                  <LinearGradient
-                    colors={['#00FF00', '#FF0000']}
-                    style={styles.verticalLine}
-                  />
-                  <View style={styles.redCircle} />
+
+              <View style={styles.routeRow}>
+                <View style={styles.iconCol}>
+                  <View style={styles.greenDot} />
+                  <LinearGradient colors={['#00FF00', '#FF0000']} style={styles.verticalLine} />
+                  <View style={styles.redDot} />
                 </View>
-                <View style={styles.textColumn}>
-                  <Text
-                    style={styles.locationText}
-                    numberOfLines={2} // Limit to 2 lines
-                    ellipsizeMode="tail" // Add ellipsis at the end if truncated
-                  >
-                    {ride?.pickup?.address || 'Pickup Location'}
+                <View style={styles.textCol}>
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {ride.pickup?.address}
                   </Text>
-                  <Text
-                    style={styles.locationText}
-                    numberOfLines={2} // Limit to 2 lines
-                    ellipsizeMode="tail" // Add ellipsis at the end if truncated
-                  >
-                    {ride?.drops[0]?.address || 'Dropoff Location'}
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {ride.drops?.map((d: any) => d.address).join(' → ')}
                   </Text>
                 </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+
+              {/* <View style={{ marginTop: 10 }}>
+                <Text style={styles.locationText}>Vehicle: {ride.vehicleType}</Text>
+                <Text style={styles.locationText}>Distance: {ride.distance} km</Text>
+                <Text style={styles.locationText}>Duration: {formatDuration(ride.duration)}</Text>
+                <Text style={styles.locationText}>Payment: {ride.paymentMode}</Text>
+              </View> */}
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -223,139 +205,113 @@ const RidesScreen = () => {
 export default RidesScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: THEAMCOLOR.SecondarySmokeWhite,
-  },
-  headerContainer: {
-    backgroundColor: '#fff',
+  container: { flex: 1, backgroundColor: THEAMCOLOR.SecondarySmokeWhite },
+  header: {
     paddingVertical: 18,
     paddingHorizontal: width * 0.05,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   headerTitle: {
+    flex: 1,
     fontFamily: THEAMFONTFAMILY.LatoRegular,
     fontSize: TEXT_SIZE.body,
     lineHeight: LINE_HEIGHT.h3,
     fontWeight: 'bold',
-    color: THEAMCOLOR.SecondaryBlack || '#333',
+    color: THEAMCOLOR.SecondaryBlack,
     textAlign: 'center',
+  },
+  filterCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: width * 0.05,
+    marginVertical: height * 0.02,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    elevation: 3,
+  },
+  filterButton: {
     flex: 1,
-  },
-  datePickerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    paddingVertical: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: height * 0.01,
-    marginVertical: height * 0.01,
   },
-  datePickerInnerContainer: {
-    flexDirection: 'row',
-    gap: 5,
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: height * 0.01,
-    shadowColor: 'gray',
-    shadowOffset: { width: 1, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-  },
-  dateText: {
+  filterText: {
     fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
     fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    color: THEAMCOLOR.SecondaryBlack || '#000',
+    color: THEAMCOLOR.SecondaryBlack,
   },
-  scrollView: {
-    flex: 1,
+  separator: {
+    width: 2,
+    height: '80%',
+    borderRadius: 1,
+    marginHorizontal: 8,
   },
-  rideContainer: {
+  scrollView: { flex: 1 },
+  messageText: {
+    textAlign: 'center',
+    marginTop: height * 0.1,
+    fontSize: 16,
+    color: THEAMCOLOR.SecondaryGray,
+  },
+  errorText: { color: '#D32F2F' },
+  rideCard: {
     backgroundColor: '#FFF',
     borderRadius: 15,
     marginHorizontal: width * 0.05,
     padding: height * 0.02,
     marginBottom: height * 0.02,
-    elevation: 5,
-    shadowColor: 'gray',
-    shadowOffset: { width: 1, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    elevation: 3,
   },
-  rideDate: {
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    color: THEAMCOLOR.SecondaryGray || '#757575',
-  },
-  status: {
-    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    fontWeight: '500',
-    marginVertical: height * 0.01,
-    width: width * 0.25,
-    borderRadius: 14,
-    paddingVertical: 1,
-    textAlign: 'center',
-  },
-  fareContainer: {
+  rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: height * 0.01,
+    marginBottom: height * 0.015,
   },
-  fareLabel: {
+  dateTextSmall: {
     fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    color: THEAMCOLOR.SecondaryGray || '#757575',
+    fontSize: 12,
+    color: THEAMCOLOR.SecondaryGray,
   },
-  fareValue: {
+  statusText: {
     fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
-    fontSize: TEXT_SIZE.small,
-    lineHeight: LINE_HEIGHT.small,
-    fontWeight: '500',
-    color: THEAMCOLOR.PrimaryGreen || '#4CAF50',
+    fontSize: 14,
+    marginTop: height * 0.005,
+  },
+  fareInfo: { alignItems: 'flex-end' },
+  label: {
+    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+    fontSize: 12,
+    color: THEAMCOLOR.SecondaryGray,
+  },
+  value: {
+    fontFamily: THEAMFONTFAMILY.NunitoSemiBold,
+    fontSize: 16,
+    color: THEAMCOLOR.PrimaryGreen,
     marginTop: 5,
   },
-  pathRow: {
+  routeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: height * 0.01,
   },
-  iconColumn: {
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  greenCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'green',
-  },
-  redCircle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'red',
-  },
-  verticalLine: {
-    width: 2,
-    height: 18,
-    marginVertical: 2,
-  },
-  textColumn: {
-    justifyContent: 'space-between',
-    height: 50,
+  iconCol: { alignItems: 'center', marginRight: 10 },
+  greenDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'green' },
+  redDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'red' },
+  verticalLine: { width: 2, height: 30, marginVertical: 2 },
+  textCol: {
     flex: 1,
-    maxWidth: width * 0.8, // Ensure text doesn't overflow the container
-    overflow: 'hidden'
+    height: 50,
+    flexDirection: "column",
+    alignItems: 'flex-start',
+    justifyContent: "space-between"
   },
   locationText: {
     fontFamily: THEAMFONTFAMILY.NunitoRegular,
-    fontSize: 12,
-    color: THEAMCOLOR.SecondaryBlack || '#000',
-    flexWrap: 'wrap', // Ensures text wraps within the container
+    fontSize: TEXT_SIZE.small,
+    color: THEAMCOLOR.SecondaryBlack,
   },
 });

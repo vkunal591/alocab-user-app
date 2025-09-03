@@ -26,6 +26,10 @@ import AboutScreen from '../screens/infoScreen/AboutScreen';
 import NotificationScreen from '../screens/supportScreens/NotificationScreen';
 import SaveDestinationScreen from '../screens/supportScreens/SaveDestinationScreen';
 import SecurityCentralScreen from '../screens/supportScreens/SecurityCentralScreen';
+import SupportTicketsScreen from '../screens/supportScreens/SupportTicketsScreen';
+import FaqScreen from '../screens/supportScreens/FaqScreen';
+import TermsConditionsScreen from '../screens/supportScreens/TermsConditionsScreen';
+import PrivacyPolicyScreen from '../screens/supportScreens/PrivacyPolicyScreen';
 
 // Define navigation param list for TypeScript
 export type RootStackParamList = {
@@ -53,6 +57,10 @@ export type RootStackParamList = {
   NotificationScreen: undefined;
   SaveDestinationScreen: undefined;
   SecurityCentralScreen: undefined;
+  SupportTicketsScreen: undefined;
+  PrivacyPolicyScreen: undefined;
+  TermsConditionsScreen: undefined;
+  FaqScreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -92,6 +100,14 @@ const StackNavigator: React.FC = () => {
       <Stack.Screen name="NotificationScreen" component={NotificationScreen} />
       <Stack.Screen name="SaveDestinationScreen" component={SaveDestinationScreen} />
       <Stack.Screen name="SecurityCentralScreen" component={SecurityCentralScreen} />
+      <Stack.Screen name="FaqScreen" component={FaqScreen} />
+      <Stack.Screen name="TermsConditionsScreen" component={TermsConditionsScreen} />
+      <Stack.Screen name="PrivacyPolicyScreen" component={PrivacyPolicyScreen} />
+      <Stack.Screen
+        name="SupportTicketsScreen"
+        component={SupportTicketsScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 };

@@ -14,12 +14,15 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  ToastAndroid,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { THEAMCOLOR } from "../../../assets/theam/theam";
 import BackButton from "../../Components/common/BackButton";
-import { initSocket, addUser, onMessageReceived,sendMessage, onTyping, onUsersUpdate, disconnectSocket, emitTyping } from "../../utils/apis/chatService";
+import { initSocket, addUser, onMessageReceived, sendMessage, onTyping, onUsersUpdate, disconnectSocket, emitTyping } from "../../utils/apis/chatService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import ImagePath from "../../constants/ImagePath";
 
 
 const { width } = Dimensions.get("screen");
@@ -37,48 +40,66 @@ const ChatScreen: React.FC = () => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const ride = route.params?.ride;
-  const currentUserId = ride?.user?._id;
+  let ticket = ride?.ticket;
   const receiverId = ride?.driver?._id;
-
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [typingUser, setTypingUser] = useState<string>("");
-
-  useEffect(() => {
-    const socket = initSocket();
-
-    if (!currentUserId) {
-      Alert.alert("Error", "Missing user ID.");
-      return;
+  const getUser = async () => {
+    const user = await AsyncStorage.getItem('user')
+    if (user) {
+      const data = await JSON.parse(user)
+      return data
     }
-    addUser(currentUserId);
+  }
+  useEffect(() => {
+    const setupChat = async () => {
+      const socket = initSocket();
 
-    onMessageReceived((msg) => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: msg.senderId + "_" + Date.now(),
-          text: msg.text,
-          isOwn: false,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          chatFile: msg.chatFile ?? null,
-        },
-      ]);
-    });
-
-    onTyping((sender) => {
-      if (sender === receiverId) {
-        setTypingUser("Opponent is typing...");
-        setTimeout(() => setTypingUser(""), 2000);
+      try {
+        const user = await AsyncStorage.getItem("user");
+        if (user) {
+          const parsed = JSON.parse(user);
+          setCurrentUserId(parsed?._id);
+          addUser(parsed?._id);
+        } else {
+          Alert.alert("Error", "User not found in local storage.");
+        }
+      } catch (error) {
+        console.error("Failed to load user:", error);
+        Alert.alert("Error", "Failed to initialize chat.");
       }
-    });
 
-    onUsersUpdate((users) => console.log("Connected users:", users));
+      onMessageReceived((msg) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: msg.senderId + "_" + Date.now(),
+            text: msg.text,
+            isOwn: false,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            chatFile: msg.chatFile ?? null,
+          },
+        ]);
+      });
+
+      onTyping((sender) => {
+        if (sender === receiverId) {
+          setTypingUser("Opponent is typing...");
+          setTimeout(() => setTypingUser(""), 2000);
+        }
+      });
+
+      onUsersUpdate((users) => console.log("Connected users:", users));
+    };
+
+    setupChat();
 
     return () => {
       disconnectSocket();
     };
-  }, [currentUserId, receiverId]);
+  }, [receiverId]);
 
   const handleSend = () => {
     if (!message.trim() || !currentUserId || !receiverId) return;
@@ -100,13 +121,21 @@ const ChatScreen: React.FC = () => {
     }
   };
 
+  const makeCall = () => {
+    const phone = ride?.driver?.phoneNumber;
+    if (!phone) {
+      return ToastAndroid.show('No phone number available', ToastAndroid.SHORT);
+    }
+    Linking.openURL(`tel:${phone}`);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <BackButton onPress={() => navigation.goBack()} />
+        <BackButton />
         <View style={styles.profileRow}>
           <Image
-            source={{ uri: ride?.driver?.image || "https://i.pravatar.cc/150?img=8" }}
+            source={ImagePath.Profile}
             style={styles.avatar}
           />
           <View style={styles.info}>
@@ -115,7 +144,7 @@ const ChatScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             style={styles.callButton}
-            onPress={() => ride?.driver?.phone && Linking.openURL(`tel:${ride.driver.phone}`)}
+            onPress={() => ride?.driver?.phoneNumber && Linking.openURL(`tel:${ride.driver.phone}`)}
           >
             <Ionicons name="call-outline" size={20} color={THEAMCOLOR.SecondaryGray} />
           </TouchableOpacity>
@@ -140,9 +169,9 @@ const ChatScreen: React.FC = () => {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.mediaButton}>
+          {/* <TouchableOpacity style={styles.mediaButton}>
             <Ionicons name="camera-outline" size={24} color={THEAMCOLOR.PrimaryGreen} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <TextInput
             style={styles.input}
             value={message}

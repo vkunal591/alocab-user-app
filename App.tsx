@@ -21,23 +21,6 @@ const App: React.FC = () => {
     requestUserPermission();
     getFcmToken();
 
-    // Foreground message handler
-    const unsubscribeForeground = getMessaging().onMessage(async remoteMessage => {
-      console.log('📩 Foreground Message:', remoteMessage);
-
-      const { title, body } = remoteMessage.notification || {};
-      const { rideId, notificationId, pickup } = remoteMessage.data || {};
-
-      if (rideId) {
-        setRideRequest({
-          title: title || 'New Ride Request',
-          body: body || '',
-          rideId: rideId?.toString() || '',
-          notificationId: notificationId?.toString() || '',
-          pickup: pickup?.toString() || '',
-        });
-      }
-    });
 
     // Token refresh handler
     const unsubscribeTokenRefresh = onTokenRefreshListener();
@@ -47,43 +30,11 @@ const App: React.FC = () => {
     checkInitialNotification();
 
     return () => {
-      unsubscribeForeground();
       unsubscribeTokenRefresh();
     };
   }, []);
 
-  // Accept ride
-  // const handleAccept = async () => {
-  //   if (!rideRequest) return;
-
-  //   try {
-  //     const response: any = await apiUtils.post(`/api/ride/accept/${rideRequest?.rideId}`, {});
-  //     console.log(response)
-  //     if (response?.success) {
-  //       navigate('DriverETAScreen', { ride: response?.ride }); // ✅ Use global navigate
-  //     } else {
-  //       throw new Error('Error accepting ride');
-  //     } console.log('Ride accepted');
-  //   } catch (error) {
-  //     console.error('Failed to accept ride:', error);
-  //   } finally {
-  //     setRideRequest(null);
-  //   }
-  // };
-
-  // // Reject ride
-  // const handleReject = async () => {
-  //   if (!rideRequest) return;
-
-  //   try {
-  //     // await rejectRideRequest(rideRequest.rideId);
-  //     console.log('Ride rejected');
-  //   } catch (error) {
-  //     console.error('Failed to reject ride:', error);
-  //   } finally {
-  //     setRideRequest(null);
-  //   }
-  // };
+  
 
   return (
     <AuthProvider>

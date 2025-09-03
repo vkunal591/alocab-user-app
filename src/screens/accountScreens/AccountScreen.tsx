@@ -22,6 +22,8 @@ import { THEAMCOLOR, THEAMFONTFAMILY, TEXT_SIZE, LINE_HEIGHT } from '../../../as
 import BackButton from '../../Components/common/BackButton';
 import ImagePath from '../../constants/ImagePath';
 import { useAuth } from '../../context/authcontext';
+import apiUtils from '../../utils/apiUtils';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,49 +39,29 @@ type FormData = {
     name: string;
     email: string;
     phone: string;
-    gender: string;
-    city: string;
-    dateOfBirth: string;
+    dob: string;
     emergencyContact: string;
 };
 
 const AccountScreen = () => {
-    const { user }: any = useAuth()
-    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const { user, setUser, logout }: any = useAuth()
+    const navigation: any = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const [modalVisible, setModalVisible] = useState(false);
     const [actionType, setActionType] = useState<'logout' | 'deactivate' | ''>('');
     const [loading, setLoading] = useState(false);
     const inputRefs = useRef<{ [key: string]: any }>({});
-
-    // Mock data - replace with actual data source
-    const profileImage = 'https://i.pravatar.cc/150?img=8'; // Replace with actual image source
-    const genderItems = [
-        { label: 'Male', value: 'male' },
-        { label: 'Female', value: 'female' },
-        { label: 'Other', value: 'other' },
-    ];
-    const cityItems = [
-        { label: 'New York', value: 'ny' },
-        { label: 'London', value: 'london' },
-        { label: 'Tokyo', value: 'tokyo' },
-    ];
+    const [showDatePicker, setShowDatePicker] = useState(false)
 
     const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
         defaultValues: {
             name: user?.name || '',
             email: user.email || '',
             phone: user?.phoneNumber || '',
-            gender: '',
-            city: '',
-            dateOfBirth: '',
-            emergencyContact: '',
+            dob: user?.dob || '',
+            emergencyContact: user?.emergencyContact || '',
         },
     });
 
-    const handleImagePick = () => {
-        // Implement image picker logic here
-        console.log('Image picker triggered');
-    };
 
     const handleFocus = (field: string) => {
         inputRefs.current[field]?.focus();
@@ -93,10 +75,11 @@ const AccountScreen = () => {
     const handleConfirm = () => {
         if (actionType === 'logout') {
             ToastAndroid.show('You have been logged out successfully.', ToastAndroid.LONG);
+            logout()
             navigation.navigate('LoginScreen');
         } else if (actionType === 'deactivate') {
             ToastAndroid.show('Your account has been deactivated.', ToastAndroid.LONG);
-            navigation.navigate('RegisterScreen');
+            navigation.navigate('LoginScreen');
         }
         setModalVisible(false);
     };
@@ -109,11 +92,18 @@ const AccountScreen = () => {
     const onSubmit = async (data: FormData) => {
         setLoading(true);
         try {
-            // Implement form submission logic here
-            console.log('Form submitted:', data);
-            ToastAndroid.show('Profile updated successfully', ToastAndroid.SHORT);
-        } catch (error) {
-            ToastAndroid.show('Error updating profile', ToastAndroid.SHORT);
+            const payload: any = { ...data };
+
+            const response: any = await apiUtils.put('/api/passenger', data);
+            console.log(response, data)
+            if (response.success) {
+                setUser(response.user);
+                ToastAndroid.show('Profile updated!', ToastAndroid.SHORT);
+            } else {
+                throw new Error(response.message || 'Failed to update');
+            }
+        } catch (err: any) {
+            ToastAndroid.show(err.message || 'Update error!', ToastAndroid.SHORT);
         } finally {
             setLoading(false);
         }
@@ -127,7 +117,7 @@ const AccountScreen = () => {
             </View>
             <View style={styles.profileHeader}>
                 <View style={styles.imageContainer}>
-                    <Image source={{ uri: profileImage }} style={styles.profileImage} />
+                    <Image source={ImagePath.Profile} style={styles.profileImage} />
                     {/* Uncomment below if you want edit button on image */}
                     {/* 
         <TouchableOpacity style={styles.editImageButton} onPress={handleImagePick}>
@@ -137,25 +127,18 @@ const AccountScreen = () => {
                 </View>
 
                 <Text style={styles.nameText}>
-                    {user?.name || 'NA'}
+                    {user?.name || 'Your Name'}
                 </Text>
 
                 <View style={styles.infoRow}>
                     <View style={styles.infoicon}>
-                        <Icon name="email" size={18} color="#555" />
                         <Text style={styles.infoText}>
-                            {user?.email || 'NA'}
-                        </Text>
-                    </View>
-                    <View style={styles.infoicon}>
-                        <Icon name="phone" size={18} color="#555" />
-                        <Text style={styles.infoText}>
-                            +91 {user?.phoneNumber || 'NA'}
+                            {user?.phoneNumber || 'NA'}
                         </Text>
                     </View>
                 </View>
             </View>
-            {/* 
+
             <View style={styles.form}>
                 <Controller
                     control={control}
@@ -173,14 +156,13 @@ const AccountScreen = () => {
                                 onChangeText={onChange}
                                 onFocus={() => handleFocus('name')}
                                 numberOfLines={1}
-                                ellipsizeMode="tail"
                             />
                         </View>
                     )}
                     name="name"
                 />
                 {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
-
+                {/* 
                 <Controller
                     control={control}
                     rules={{
@@ -269,35 +251,49 @@ const AccountScreen = () => {
                     name="gender"
                 />
                 {errors.gender && <Text style={styles.errorText}>{errors.gender.message}</Text>}
-
+ */}
 
                 <Controller
                     control={control}
+                    name="dob"
                     rules={{
-                        pattern: {
-                            value: /^\d{2}-\d{2}-\d{4}$/,
-                            message: 'Date must be in MM-DD-YYYY format',
-                        },
+                        required: 'Date of Birth is required',
                     }}
-                    render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={[styles.inputWrapper, errors.dateOfBirth && styles.inputError]}>
-                            <Image source={ImagePath.dob} style={styles.inputIcon} />
-                            <View style={styles.line} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="MM-DD-YYYY"
-                                value={value}
-                                onBlur={onBlur}
-                                onChangeText={onChange}
-                                onFocus={() => handleFocus('dateOfBirth')}
-                                numberOfLines={1}
-                                ellipsizeMode="tail"
-                            />
-                        </View>
+                    render={({ field: { onChange, value } }) => (
+                        <>
+                            <TouchableOpacity
+                                onPress={() => setShowDatePicker(true)}
+                                style={[styles.inputWrapper, errors.dob && styles.inputError]}
+                            >
+                                <Image source={ImagePath.dob} style={styles.inputIcon} />
+                                <View style={styles.line} />
+                                <Text style={[styles.input,{paddingVertical:15}]}>
+                                    {value ? value : 'Select Date of Birth'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={value ? new Date(value) : new Date()}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    maximumDate={new Date()}
+                                    onChange={(event, selectedDate) => {
+                                        setShowDatePicker(Platform.OS === 'ios'); // keep open for iOS
+                                        if (selectedDate) {
+                                            const formattedDate = `${selectedDate.getMonth() + 1}-${selectedDate.getDate()}-${selectedDate.getFullYear()}`;
+                                            onChange(formattedDate);
+                                        }
+                                    }}
+                                />
+                            )}
+                            {errors.dob && (
+                                <Text style={styles.errorText}>{errors.dob.message}</Text>
+                            )}
+                        </>
                     )}
-                    name="dateOfBirth"
                 />
-                {errors.dateOfBirth && <Text style={styles.errorText}>{errors.dateOfBirth.message}</Text>}
+                {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
 
                 <Controller
                     control={control}
@@ -320,13 +316,12 @@ const AccountScreen = () => {
                                 keyboardType="phone-pad"
                                 onFocus={() => handleFocus('emergencyContact')}
                                 numberOfLines={1}
-                                ellipsizeMode="tail"
                             />
                         </View>
                     )}
                     name="emergencyContact"
                 />
-                {errors.emergencyContact && <Text style={styles.errorText}>{errors.emergencyContact.message}</Text>} 
+                {errors.emergencyContact && <Text style={styles.errorText}>{errors.emergencyContact.message}</Text>}
 
                 <TouchableOpacity
                     style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -340,7 +335,7 @@ const AccountScreen = () => {
                     )}
                 </TouchableOpacity>
             </View>
-                        */}
+
 
             <TouchableOpacity
                 style={styles.logoutButton}
@@ -474,7 +469,7 @@ const styles = StyleSheet.create({
         shadowRadius: 3,
     },
     input: {
-        flex: 1,
+        // flex: 1,
         height: 50,
         paddingHorizontal: 10,
         fontSize: 13,
@@ -621,17 +616,17 @@ const styles = StyleSheet.create({
         color: THEAMCOLOR.SecondaryBlack || '#333',
     },
     nameText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
-        marginVertical: 5,
+        marginVertical: 0,
         color: THEAMCOLOR.PrimaryGreen,
     },
     infoRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         alignItems: 'center',
         width: width * 0.9,
-        marginTop: 10,
+        marginTop: 0,
     },
     infoicon: {
         flexDirection: 'row',
@@ -640,7 +635,7 @@ const styles = StyleSheet.create({
         // marginTop: 10,
     },
     infoText: {
-        fontSize: 16,
+        fontSize: 13,
         color: '#555',
         alignItems: 'center'
     },

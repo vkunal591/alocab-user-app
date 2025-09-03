@@ -18,10 +18,11 @@ import ImagePath from '../../constants/ImagePath';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import apiUtils from '../../utils/apiUtils';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { TextInput } from 'react-native';
 
 const { width, height } = Dimensions.get('screen');
 const COLLAPSED_HEIGHT = 160;
-const EXPANDED_HEIGHT = height * 0.43;
+const EXPANDED_HEIGHT = height * 0.45;
 
 const THEAMCOLOR = {
   PrimaryGreen: '#4CAF50',
@@ -52,7 +53,7 @@ const RideSelectionScreen = () => {
     address: drop?.address ?? 'Initial Drop',
     coordinates: drop?.coordinates ?? { latitude: 28.625, longitude: 77.215 },
   });
-
+  const [locationSaveModal, setLocationSaveModal] = useState(false)
   const [distance, setDistance] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -68,11 +69,50 @@ const RideSelectionScreen = () => {
     vehicleType: string;
   } | null>(null);
   const [loadingFare, setLoadingFare] = useState(false);
+  const [label, setLabel] = useState('');
 
   const mapRef = useRef<MapView>(null);
   const maxTranslateY = EXPANDED_HEIGHT - COLLAPSED_HEIGHT;
   const pan = useRef(new Animated.Value(maxTranslateY)).current;
   const [isExpanded, setIsExpanded] = useState(false);
+
+
+  const handleSaveLabel = async () => {
+    if (!label.trim()) {
+      ToastAndroid.show("Please enter a valid label", ToastAndroid.SHORT);
+      return;
+    }
+    const locaion = locationType === 'drop' ? dropLocation : pickupLocation
+    const payload = {
+      label: label.trim(),
+      address: locaion?.address,
+      coordinates: {
+        latitude: locaion.coordinates.latitude,
+        longitude: locaion.coordinates.longitude,
+      },
+      description: 'User-saved location',
+      status: 'active',
+    };
+
+    try {
+      // Replace this with your real endpoint
+      const response: any = await apiUtils.post(`/api/location`, payload);
+      console.log(response, payload)
+      if (response?.success) {
+        ToastAndroid.show("Location saved successfully", ToastAndroid.SHORT);
+        setLabel('');
+        setLocationSaveModal(false);
+        // Optionally update local state/UI
+        handleGetSaveLocation(); // e.g., refetch updated list
+      } else {
+        ToastAndroid.show("Failed to save location", ToastAndroid.SHORT);
+      }
+    } catch (error) {
+      // console.error("Save Location Error:", error);
+      ToastAndroid.show("An error occurred", ToastAndroid.SHORT);
+    }
+  };
+
 
   const fetchFare = async (vehicleType: string) => {
     if (!pickupLocation || !dropLocation) return;
@@ -296,7 +336,14 @@ const RideSelectionScreen = () => {
               setModalVisible(true);
             }}
           >
-            <Text numberOfLines={1}>{pickupLocation.address}</Text>
+            <Text style={{ width: width * .7 }} numberOfLines={1}>{pickupLocation.address}</Text>
+            <TouchableOpacity style={{ padding: 5 }} onPress={() => {
+              setLocationSaveModal(!locationSaveModal)
+              setLocationType('pickup');
+
+            }}>
+              <Icon name='bookmark' size={22} color={THEAMCOLOR.PrimaryGreen} style={{ marginRight: 20, marginLeft: 10 }} />
+            </TouchableOpacity>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -306,7 +353,14 @@ const RideSelectionScreen = () => {
               setModalVisible(true);
             }}
           >
-            <Text numberOfLines={1}>{dropLocation.address}</Text>
+            <Text style={{ width: width * 0.7 }} numberOfLines={1}>{dropLocation.address}</Text>
+            <TouchableOpacity style={{ padding: 5 }} onPress={() => {
+              setLocationSaveModal(!locationSaveModal);
+              setLocationType('drop');
+            }
+            }>
+              <Icon name='bookmark' size={22} color={THEAMCOLOR.PrimaryGreen} style={{ marginRight: 20, marginLeft: 10 }} />
+            </TouchableOpacity>
           </TouchableOpacity>
         </View>
 
@@ -369,7 +423,48 @@ const RideSelectionScreen = () => {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+
+
+      <Modal
+        visible={locationSaveModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLocationSaveModal(false)}
+      >
+        <View style={styles.overlayBackground}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {locationType === 'pickup' ? 'Save Pickup Location' : 'Save Drop Location'}
+            </Text>
+
+            <TextInput
+              placeholder="Enter label (e.g., Home, Office)"
+              placeholderTextColor="#aaa"
+              value={label}
+              onChangeText={setLabel}
+              style={styles.input}
+            />
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={() => setLocationSaveModal(false)}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.saveButton]}
+                onPress={handleSaveLabel}
+              >
+                <Text style={[styles.buttonText, { color: '#fff' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+    </SafeAreaView >
   );
 };
 
@@ -429,6 +524,8 @@ const styles = StyleSheet.create({
     borderColor: '#ccc',
     paddingVertical: 6,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   rideOptionsRow: {
     marginVertical: 10,
@@ -483,5 +580,51 @@ const styles = StyleSheet.create({
   },
   detailsText: {
     marginLeft: 5, fontWeight: '600',
+  },
+  overlayBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBox: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  input: {
+    width: '100%',
+    height: 45,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    marginBottom: 20,
+    color: '#000',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f2f2f2',
+  },
+  saveButton: {
+    backgroundColor: '#4CAF50',
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

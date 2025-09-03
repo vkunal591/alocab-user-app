@@ -40,35 +40,33 @@ function CustomDrawerContent(props: any) {
     return (
         <DrawerContentScrollView {...props}>
             {/* Profile Section */}
-            <View style={styles.profileContainer}>
-                <TouchableOpacity
-                    onPress={() => props.navigation.navigate('AccountScreen')}
-                    style={{ position: 'relative', zIndex: 5 }}
-                // disabled={isLoading}
-                >
+            <TouchableOpacity
+                onPress={() => props.navigation.navigate('AccountScreen')}
+                style={{ position: 'relative', zIndex: 5 }}
+            // disabled={isLoading}
+            >
+                <View style={styles.profileContainer}>
                     <Image
-                        source={{
-                            uri: 'https://i.pravatar.cc/150?img=8'
-                        }}
+                        source={ImagePath.Profile}
                         style={styles.profileImage}
-                        defaultSource={{ uri: 'https://i.pravatar.cc/150?img=8' }} // Add a default profile image in ImagePath
+                        defaultSource={ImagePath.Profile} // Add a default profile image in ImagePath
                     />
-                </TouchableOpacity>
-                <View style={styles.profileTextContainer}>
-                    <Text style={styles.profileName}>
-                        {user?.name || 'Guest User'}
-                    </Text>
-                    <Text style={styles.profilePhone}>
-                        {user?.phoneNumber || 'Not provided'}
-                    </Text>
-                    {/* <View style={styles.ratingContainer}>
+                    <View style={styles.profileTextContainer}>
+                        <Text style={styles.profileName}>
+                            {user?.name || 'Your Name'}
+                        </Text>
+                        <Text style={styles.profilePhone}>
+                            {user?.phoneNumber || 'Not provided'}
+                        </Text>
+                        {/* <View style={styles.ratingContainer}>
                         <Text style={styles.ratedText}>Rated </Text>
                         {[...Array(5)].map((_, index) => (
                             <Icon key={index} name="star" size={16} color="#FFB700" />
-                        ))}
+                            ))}
                     </View> */}
+                    </View>
                 </View>
-            </View>
+            </TouchableOpacity>
 
             {/* Drawer Items */}
             <DrawerItemList {...props} />
@@ -122,7 +120,7 @@ function CustomDrawerContent(props: any) {
                 )}
                 labelStyle={styles.drawerLabel}
             /> */}
-            <DrawerItem
+            {/* <DrawerItem
                 label="Security Central"
                 onPress={() => props.navigation.navigate('SecurityCentralScreen')}
                 icon={({ focused }) => (
@@ -137,7 +135,7 @@ function CustomDrawerContent(props: any) {
                     />
                 )}
                 labelStyle={styles.drawerLabel}
-            />
+            /> */}
             <DrawerItem
                 label="About"
                 onPress={() => props.navigation.navigate('AboutScreen')}

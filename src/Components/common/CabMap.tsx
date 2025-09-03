@@ -15,6 +15,7 @@ import MapViewDirections from 'react-native-maps-directions';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Entypo from 'react-native-vector-icons/Entypo';
 import ImagePath from '../../constants/ImagePath';
+import { THEAMCOLOR } from '../../../assets/theam/theam';
 
 const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_APIKEY = process.env.MAPS_API_KEY;
@@ -200,6 +201,12 @@ const CabMap: React.FC<Props> = ({
         showsUserLocation={!rideStart}
         followsUserLocation={rideStart}
         showsMyLocationButton={!rideStart}
+        initialRegion={{
+          latitude: 28.6139, // example: New Delhi
+          longitude: 77.2090,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.0121,
+        }}
       >
         {newPickupCoords && (
           <Marker
@@ -217,8 +224,12 @@ const CabMap: React.FC<Props> = ({
             anchor={{ x: 0.5, y: 0.5 }}
             rotation={markerRotation}
             flat
-            image={ImagePath.Rides}
-          />
+          >
+            <View style={styles.customMarker}>
+              <Entypo name="direction" size={30} color={THEAMCOLOR.PrimaryGreen} />
+            </View>
+          </Marker.Animated>
+
         )}
 
         {currentCoords && newPickupCoords && GOOGLE_MAPS_APIKEY && (
@@ -318,6 +329,15 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 10,
     elevation: 4,
+  },
+  customMarker: {
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

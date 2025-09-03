@@ -56,33 +56,35 @@ const HomeScreen = () => {
   const [saving, setSaving] = useState(false);
   const [activeRide, setActiveRide] = useState<any>(null);
 
-  const handlePlaceSelect = async (place: any) => {
-    if (!place?.latitude || !place?.longitude) return;
+  // const handlePlaceSelect = async (place: any) => {
+  //   if (!place?.latitude || !place?.longitude) return;
 
-    setSaving(true);
-    setSelectedPlace(place);
-    try {
-      const response: any = await apiUtils.post('/api/location', {
-        label: place.address,
-        address: place.address,
-        coordinates: [place.latitude, place.longitude],
-        description: place.address,
-      });
-
-      ToastAndroid.show(
-        response?.success ? 'Location saved!' : 'Save failed',
-        ToastAndroid.SHORT
-      );
-    } catch (error) {
-      ToastAndroid.show('Error saving location', ToastAndroid.SHORT);
-    } finally {
-      setSaving(false);
-    }
-  };
+  //   setSaving(true);
+  //   setSelectedPlace(place);
+  //   try {
+  //     const response: any = await apiUtils.post('/api/location', {
+  //       label: place.address,
+  //       address: place.address,
+  //       coordinates: [place.latitude, place.longitude],
+  //       description: place.address,
+  //     });
+  //     console.log(response)
+  //     // ToastAndroid.show(
+  //     //   response?.success ? 'Location saved!' : 'Save failed',
+  //     //   ToastAndroid.SHORT
+  //     // );
+  //   } catch (error) {
+  //     console.log(error)
+  //     // ToastAndroid.show('Error saving location', ToastAndroid.SHORT);
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
   const handleGetSaveLocation = async () => {
     try {
       const response: any = await apiUtils.get('/api/location');
+      console.log(response)
       if (response?.success && Array.isArray(response?.data)) {
         setSavedDestinations(response.data);
       } else {
@@ -174,7 +176,19 @@ const HomeScreen = () => {
 
   const renderSavedDestination = ({ item, index }: { item: any; index: number }) => (
     <>
-      <TouchableOpacity style={styles.savedDestination}>
+      <TouchableOpacity style={styles.savedDestination} onPress={() => {
+        const picup = {
+          address: (location?.address?.landmark ?? location?.address?.locality) + "," + location?.address?.city + ", " + location?.address?.state + "," + location?.address?.pincode,
+          coordinates: { latitude: location?.latitude, longitude: location.longitude },
+        }
+        const drop = {
+          address: item?.address,
+          coordinates: { latitude: item?.coordinates?.latitude, longitude: item?.coordinates?.longitude },
+        }
+        console.log(picup, drop, item)
+        navigation.navigate('RideSelectionScreen', { drop, picup })
+      }
+      }>
         <View>
           <Text numberOfLines={1} style={styles.savedLabel}>{item.label}</Text>
           <Text numberOfLines={1} style={styles.savedAddress}>{item.address}</Text>
@@ -265,6 +279,14 @@ const HomeScreen = () => {
                 </Text>
               </View>
             </View>
+            <View style={{ width: 50, marginLeft: 'auto' }}>
+              <TouchableOpacity
+                style={{ padding: 10 }}
+                onPress={() => navigation.navigate('NotificationScreen')}
+              >
+                <Entypo name="bell" size={20} color={THEAMCOLOR.PrimaryGreen} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.bottomSheet}>
@@ -332,11 +354,7 @@ const HomeScreen = () => {
                 onPress={(data, details = null) => {
                   // console.log(data, details)
                   if (!details?.geometry?.location) return;
-                  const place = {
-                    address: data.description,
-                    latitude: details.geometry.location.lat,
-                    longitude: details.geometry.location.lng,
-                  };
+
                   console.log(location)
                   const picup = {
                     address: (location?.address?.landmark ?? location?.address?.locality) + "," + location?.address?.city + ", " + location?.address?.state + "," + location?.address?.pincode,
@@ -346,7 +364,6 @@ const HomeScreen = () => {
                     address: data?.description,
                     coordinates: { latitude: details.geometry.location.lat, longitude: details.geometry.location.lng },
                   }
-                  handlePlaceSelect(place);
                   navigation.navigate('RideSelectionScreen', { drop, picup })
                 }}
                 GooglePlacesSearchQuery={{

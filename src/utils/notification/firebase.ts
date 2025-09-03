@@ -1,5 +1,6 @@
 import messaging from '@react-native-firebase/messaging';
 import { Alert, Platform } from 'react-native';
+import { updateLocation } from '../tools/locationServices';
 
 /**
  * Ask the user for notification permission
@@ -26,6 +27,7 @@ export const getFcmToken = async () => {
         const token = await messaging().getToken();
         if (token) {
             console.log('FCM Token:', token);
+            updateLocation({ fcmToken: token }, () => { })
             return token;
             // ✅ You can save token to backend here
         } else {

@@ -34,23 +34,13 @@ const AboutScreen = ({ navigation }) => {
             <Text style={styles.version}>Version 3.2.25</Text>
 
             {/* Links */}
-            <TouchableOpacity style={styles.linkContainer}>
+            <TouchableOpacity style={styles.linkContainer} onPress={() => navigation.navigate('PrivacyPolicyScreen')}>
                 <Text style={styles.linkText}>Privacy Policy</Text>
                 <Text style={styles.arrow}><Icon name="right" size={14} color="gray" /></Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.linkContainer}>
+            <TouchableOpacity style={styles.linkContainer} onPress={() => navigation.navigate('TermsConditionsScreen')}>
                 <Text style={styles.linkText}>Terms & Conditions</Text>
-                <Text style={styles.arrow}><Icon name="right" size={14} color="gray" /></Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.linkContainer}>
-                <Text style={styles.linkText}>Blog</Text>
-                <Text style={styles.arrow}><Icon name="right" size={14} color="gray" /></Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.linkContainer}>
-                <Text style={styles.linkText}>Software License</Text>
                 <Text style={styles.arrow}><Icon name="right" size={14} color="gray" /></Text>
             </TouchableOpacity>
         </View>
@@ -60,7 +50,7 @@ const AboutScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: '#ffff',
         alignItems: 'center',
     },
 

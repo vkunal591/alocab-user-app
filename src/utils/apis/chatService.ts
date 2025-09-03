@@ -109,7 +109,7 @@
 
 
 // src/utils/apis/socketService.ts
-
+// chatService.ts
 import { io, Socket } from "socket.io-client";
 import { Platform, ToastAndroid } from "react-native";
 
@@ -123,6 +123,7 @@ type MessagePayload = {
   text?: string;
   chatFile?: string | null;
 };
+
 type TypingPayload = {
   senderId: string;
   receiverId: string;
@@ -186,4 +187,16 @@ export const markAsRead = (payload: { senderId: string; receiverId: string }): v
 
 export const onMessagesRead = (cb: (data: { receiverId: string }) => void): void => {
   socket?.on("messagesRead", cb);
+};
+
+// ✅ NEW: Listen for in-app notifications
+export const onNotificationReceived = (
+  cb: (notification: {
+    senderId: string;
+    type: "message" | "file";
+    content: string;
+    timestamp: string;
+  }) => void
+): void => {
+  socket?.on("getNotification", cb);
 };
